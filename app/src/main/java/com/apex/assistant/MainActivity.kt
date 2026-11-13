@@ -1281,6 +1281,70 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {
     private val mainHandler = Handler(Looper.getMainLooper())
 
     companion object {
+                private var sharedTts: TextToSpeech? = null
+        private var sharedTtsReady = false
+
+        fun speakNatural(ctx: Context, rawText: String, onDone: (() -> Unit)? = null) {
+            val clean = rawText.replace(Regex("[*#_`~>|\\[\\]]"), "").replace(Regex("\\s+"), " ").trim()
+            if (clean.isEmpty()) { onDone?.invoke(); return }
+            fun doSpeak(e: TextToSpeech) {
+                try {
+                    val v = e.voices?.filter { it.locale.language == "ru" }
+                    val best = v?.firstOrNull { it.name.contains("ruf", true) || it.name.contains("rud", true) } ?: v?.maxByOrNull { it.quality }
+                    if (best != null) e.voice = best
+                } catch (_: Exception) {}
+                e.setPitch(0.95f)
+                e.setSpeechRate(1.02f)
+                e.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onStart(id: String?) {}
+                    override fun onDone(id: String?) { onDone?.invoke() }
+                    override fun onError(id: String?) { onDone?.invoke() }
+                })
+                e.speak(clean, TextToSpeech.QUEUE_FLUSH, Bundle(), "APEX_VOICE")
+            }
+            if (sharedTts != null && sharedTtsReady) doSpeak(sharedTts!!) else {
+                sharedTts = TextToSpeech(ctx.applicationContext) { st ->
+                    if (st == TextToSpeech.SUCCESS) { sharedTts?.setLanguage(Locale("ru", "RU")); sharedTtsReady = true; doSpeak(sharedTts!!) } else onDone?.invoke()
+                }
+            }
+        }
+
+        private fun runSmartCommand(ctx: Context, raw: String): String? {
+            val q = raw.lowercase(Locale.getDefault()).trim()
+            try {
+                if (q.contains("фонарик") || q.contains("включи свет") || q.contains("выключи свет")) {
+                    val cm = ctx.getSystemService(Context.CAMERA_SERVICE) as android.hardware.camera2.CameraManager
+                    val id = cm.cameraIdList.firstOrNull() ?: return null
+                    val on = !(q.contains("выкл") || q.contains("откл") || q.contains("погаси"))
+                    cm.setTorchMode(id, on)
+                    return if (on) "🔦 Фонарик включён." else "🔦 Фонарик выключен."
+                }
+                if (q.startsWith("открой ") || q.startsWith("запусти ") || q.startsWith("включи ")) {
+                    val t = q.removePrefix("открой ").removePrefix("запусти ").removePrefix("включи ").trim()
+                    val map = mapOf("ютуб" to "youtube", "телеграм" to "telegram", "тг" to "telegram", "ватсап" to "whatsapp", "вк" to "vk", "тикток" to "tiktok", "хром" to "chrome", "озон" to "ozon", "вб" to "wildberries", "сдэк" to "cdek", "авито" to "avito")
+                    val w = map[t] ?: t
+                    val pm = ctx.packageManager
+                    for (app in pm.getInstalledApplications(0)) {
+                        val lbl = pm.getApplicationLabel(app).toString().lowercase(Locale.getDefault())
+                        if ((lbl.contains(w) || app.packageName.lowercase().contains(w)) && w.length >= 2) {
+                            pm.getLaunchIntentForPackage(app.packageName)?.let { it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); ctx.startActivity(it); return "🚀 Открываю ${pm.getApplicationLabel(app)}..." }
+                        }
+                    }
+                    if (t.contains("камер")) { ctx.startActivity(Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); return "📷 Открываю камеру..." }
+                }
+                if (q.startsWith("позвони ") || q.startsWith("набери ")) {
+                    val num = q.replace(Regex("[^0-9+]"), "")
+                    if (num.length >= 3) { ctx.startActivity(Intent(Intent.ACTION_CALL, Uri.parse("tel:$num")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); return "📞 Набираю $num..." }
+                }
+                if (q.startsWith("найди ")) {
+                    val s = q.removePrefix("найди ").trim()
+                    ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://google.com" + Uri.encode(s))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    return "🔍 Ищу: $s"
+                }
+            } catch (_: Exception) {}
+            return null
+        }
+        
         fun queryBrainDirect(
             ctx: Context,
             prompt: String,
