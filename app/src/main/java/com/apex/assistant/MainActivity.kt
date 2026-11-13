@@ -1299,10 +1299,9 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {
 
                     val sysPrompt = if (isCreator) {
                         "Ты — Apex AI, персональный интеллектуальный ассистент твоего создателя Derek Stealth. Отвечай чётко, по делу и на русском языке."
+                        
                     } else {
-                                             "Ты — Apex AI, персональный интеллектуальный ассистент твоего создателя Derek Stealth. Отвечай чётко, по делу и на русском языке."
-                    } else {
-                        "Ты — Apex AI Assistant, умный голосовой и текстовый помощник, созданный разработчиком Derek Stealth. Отвечай понятно, дружелюбно и на русском языке."
+                        "Ты — Apex AI Assistant, умный голосовой и текстовый помощник, созданный разработчиком Derek Stealth. Отвечай понятно, дружелюбно и на русском язяке."
                     }
 
                     val messages = JSONArray()
