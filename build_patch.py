@@ -89,7 +89,7 @@ code2 = rf'''
                     return "Сегодня " + sdf.format(java.util.Date()) + "."
                 }}
                 if (q.contains("будильник")) {{
-                                    if (q.contains("будильник")) {{
+                                    
                     val nums = Regex("\\d+").findAll(q).map {{ it.value.toInt() }}.toList()
                     if (nums.isNotEmpty()) {{
                         val h = nums.first().coerceIn(0, 23)
