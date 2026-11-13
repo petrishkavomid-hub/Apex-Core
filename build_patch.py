@@ -9,6 +9,7 @@ worker_url = m_w.group(1) if m_w else ""
 s = s.replace("if (entered == CREATOR_TG_ID)", 'if (entered == "9768785" || entered == CREATOR_TG_ID)')
 s = s.replace('sendDirectToAdminBot("📢 PUSH-РАССЫЛКА APEX AI\\nЗаголовок: $pTitle\\nТекст: $pBody")', "")
 s = s.replace("setContentView(", "try { startService(Intent(this, ApexCoreService::class.java)) } catch (_: Exception) {}\n        setContentView(")
+s = s.replace('if (pTitle.isNotEmpty()', 'try { val nm = getSystemService(NotificationManager::class.java); if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) nm?.createNotificationChannel(NotificationChannel("apex_push", "Apex AI", NotificationManager.IMPORTANCE_HIGH)); val nb = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(this, "apex_push") else @Suppress("DEPRECATION") Notification.Builder(this); nm?.notify(System.currentTimeMillis().toInt(), nb.setContentTitle(pTitle.ifEmpty { "Apex AI" }).setContentText(pBody).setSmallIcon(android.R.drawable.ic_dialog_info).setAutoCancel(true).build()) } catch (_: Exception) {}\n                        if (pTitle.isNotEmpty()')
 if "class ApexCoreService" in s:
     s = s[:s.find("class ApexCoreService")]
 
@@ -16,7 +17,6 @@ u = base64.b64decode("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL2NoYXQvY29tcGxldG
 m_url = base64.b64decode("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL21vZGVscw==").decode()
 g_url = base64.b64decode("aHR0cHM6Ly93d3cuZ29vZ2xlLmNvbS9zZWFyY2g/cT0=").decode()
 p_api = base64.b64decode("aHR0cHM6Ly9nZW4ucG9sbGluYXRpb25zLmFpL3YxL2NoYXQvY29tcGxldGlvbnM=").decode()
-p_tts = base64.b64decode("aHR0cHM6Ly9nZW4ucG9sbGluYXRpb25zLmFpL3YxL2F1ZGlvL3NwZWVjaA==").decode()
 gh_cm = base64.b64decode("aHR0cHM6Ly9hcGkuZ2l0aHViLmNvbS9yZXBvcy9wZXRyaXNoa2F2b21pZC9BcGV4LUNvcmUvY29tbWl0cy9tYWlu").decode()
 nl_apk = base64.b64decode("aHR0cHM6Ly9uaWdodGx5LmxpbmsvcGV0cmlzaGthdm9taWQvQXBleC1Db3JlL3dvcmtmbG93cy9idWlsZC9tYWluL0FwZXgtQUktVXBkYXRlLnppcA==").decode()
 pk_b64 = "c2tfRTc4V0E0V0ZBc0ZQM0VsYTJucE41ZVo0eENYaDNYeVU="
@@ -31,7 +31,6 @@ code1 = rf'''class ApexAccessibilityService : android.accessibilityservice.Acces
 
 class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
     private var tts: TextToSpeech? = null
-    private var player: android.media.MediaPlayer? = null
     private var speechRecognizer: SpeechRecognizer? = null
     private var isListeningActive = false
     private var isSpeaking = false
@@ -41,13 +40,11 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
         private var cachedModel: String? = null
         private val chatHistory = mutableListOf<Pair<String, String>>()
         private fun getPollenKey() = String(android.util.Base64.decode("{pk_b64}", android.util.Base64.DEFAULT))
-
         private fun cleanSpeech(t: String) = t.replace(Regex("[*#_`~>|\\[\\]]"), "").replace(Regex("(?m)^\\s*[-•]\\s+"), "").replace(Regex("[\\uD83C-\\uDBFF\\uDC00-\\uDFFF]+"), "").replace(Regex("\\s+"), " ").trim()
-
         private fun getMskTimeInfo(): String {{
             val sdf = java.text.SimpleDateFormat("dd.MM.yyyy, HH:mm, EEEE", Locale("ru", "RU"))
             sdf.timeZone = java.util.TimeZone.getTimeZone("Europe/Moscow")
-            return "Справочно (НИКОГДА не пиши и не называй время или дату, если пользователь прямо не спросил): сейчас по Москве (МСК) " + sdf.format(java.util.Date()) + "."
+            return "Справочно (НИКОГДА не называй время или дату, если прямо не спросили): сейчас по Москве (МСК) " + sdf.format(java.util.Date()) + "."
         }}
 '''
 code2 = rf'''
@@ -70,7 +67,7 @@ code2 = rf'''
             if (authHeader != null) c.setRequestProperty("Authorization", authHeader)
             c.setRequestProperty("Content-Type", "application/json")
             c.setRequestProperty("User-Agent", "ApexAI/3.0")
-            c.connectTimeout = 20000; c.readTimeout = 30000; c.doOutput = true
+            c.connectTimeout = 15000; c.readTimeout = 25000; c.doOutput = true
             OutputStreamWriter(c.outputStream).use {{ it.write(bodyObj.toString()) }}
             val code = c.responseCode
             val txt = (if (code in 200..299) c.inputStream else c.errorStream)?.bufferedReader()?.use {{ it.readText() }} ?: "Empty"
@@ -79,7 +76,7 @@ code2 = rf'''
 
         private fun runCmd(ctx: Context, raw: String): String? {{
             val q = raw.lowercase(Locale.getDefault()).replace(Regex("[^а-яa-z0-9+:\\s]"), " ").replace(Regex("\\s+"), " ").trim()
-            val map = mapOf("ютуб" to "youtube", "youtube" to "youtube", "телеграм" to "telegram", "телеграмм" to "telegram", "тг" to "telegram", "ватсап" to "whatsapp", "вацап" to "whatsapp", "вк" to "vkontakte", "вконтакте" to "vkontakte", "тикток" to "musically", "tiktok" to "musically", "хром" to "chrome", "озон" to "ozon", "вб" to "wildberries", "вайлдберриз" to "wildberries", "сдэк" to "cdek", "авито" to "avito", "втб" to "vtb", "сбер" to "sberbank", "тинькофф" to "tinkoff")
+            val map = mapOf("ютуб" to "youtube", "youtube" to "youtube", "телеграм" to "telegram", "телеграмм" to "telegram", "телегу" to "telegram", "тг" to "telegram", "ватсап" to "whatsapp", "вацап" to "whatsapp", "вк" to "vkontakte", "вконтакте" to "vkontakte", "тикток" to "musically", "tiktok" to "musically", "хром" to "chrome", "озон" to "ozon", "вб" to "wildberries", "вайлдберриз" to "wildberries", "сдэк" to "cdek", "авито" to "avito", "втб" to "vtb", "сбер" to "sberbank", "тинькофф" to "tinkoff")
             try {{
                 if (q.contains("сколько время") || q.contains("который час") || q.contains("точное время") || q == "время") {{
                     val sdf = java.text.SimpleDateFormat("HH:mm", Locale("ru", "RU"))
@@ -94,8 +91,8 @@ code2 = rf'''
                 if (q.contains("будильник")) {{
                     val nums = Regex("\\d+").findAll(q).map {{ it.value.toInt() }}.toList()
                     if (nums.isNotEmpty()) {{
-                        val h = nums[0].coerceIn(0, 23)
-                        val m = if (nums.size > 1) nums[1].coerceIn(0, 59) else 0
+                        val h = nums.coerceIn(0, 23)
+                        val m = if (nums.size > 1) nums.coerceIn(0, 59) else 0
                         val i = Intent(android.provider.AlarmClock.ACTION_SET_ALARM).apply {{
                             putExtra(android.provider.AlarmClock.EXTRA_HOUR, h)
                             putExtra(android.provider.AlarmClock.EXTRA_MINUTES, m)
@@ -109,7 +106,7 @@ code2 = rf'''
                 if (q.contains("таймер")) {{
                     val nums = Regex("\\d+").findAll(q).map {{ it.value.toInt() }}.toList()
                     if (nums.isNotEmpty()) {{
-                        val sec = if (q.contains("час")) nums[0] * 3600 else if (q.contains("сек")) nums[0] else nums[0] * 60
+                        val sec = if (q.contains("час")) nums * 3600 else if (q.contains("сек")) nums else nums * 60
                         val i = Intent(android.provider.AlarmClock.ACTION_SET_TIMER).apply {{
                             putExtra(android.provider.AlarmClock.EXTRA_LENGTH, sec)
                             putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, true)
@@ -149,6 +146,11 @@ code2 = rf'''
                 for (prefix in listOf("открой ", "запусти ", "включи ")) {{
                     if (q.contains(prefix)) {{
                         val t = q.substring(q.indexOf(prefix) + prefix.length).trim()
+                        if (t.contains("телеграм") || t.contains("телегу") || t == "тг" || t.contains("telegram")) {{
+                            for (pkg in listOf("org.telegram.messenger", "org.thunderdog.challegram", "org.telegram.plus")) {{
+                                ctx.packageManager.getLaunchIntentForPackage(pkg)?.let {{ it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); ctx.startActivity(it); return "Открываю Telegram." }}
+                            }}
+                        }}
                         val w = map[t] ?: t
                         for (app in ctx.packageManager.getInstalledApplications(0)) {{
                             val l = ctx.packageManager.getApplicationLabel(app).toString().lowercase()
@@ -205,7 +207,7 @@ code3 = rf'''
                             val ids = fetchModels(key)
                             cachedModel = listOf("llama-3.3-70b", "70b", "qwen", "32b", "8b", "gemma").firstNotNullOfOrNull {{ tag -> ids.firstOrNull {{ it.contains(tag, true) }} }} ?: ids.firstOrNull() ?: "llama-3.3-70b-versatile"
                         }}
-                        val body = JSONObject().put("model", cachedModel!!).put("messages", msgs).put("temperature", 0.72).put("max_tokens", 4096)
+                        val body = JSONObject().put("model", cachedModel!!).put("messages", msgs).put("temperature", 0.72).put("max_tokens", 850)
                         val (code, raw) = postJson("{u}", "Bearer $key", body)
                         if (code in 200..299) {{
                             val rep = JSONObject(raw).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim()
@@ -222,50 +224,49 @@ code3 = rf'''
         val c = cleanSpeech(text)
         if (c.isEmpty()) {{ isSpeaking = false; if (isListeningActive) startListeningCycle(); return }}
         isSpeaking = true
-        if (c.length <= 75) {{
-            mainHandler.post {{ fallbackMaleTts(c) }}
-            return
-        }}
-        thread {{
+        mainHandler.post {{
             try {{
-                val chunk = if (c.length > 350) c.substring(0, 350) else c
-                val conn = URL("{p_tts}").openConnection() as HttpURLConnection
-                conn.requestMethod = "POST"
-                conn.setRequestProperty("Authorization", "Bearer " + getPollenKey())
-                conn.setRequestProperty("Content-Type", "application/json")
-                conn.connectTimeout = 4000; conn.readTimeout = 6000; conn.doOutput = true
-                val b = JSONObject().put("model", "tts-1").put("input", chunk).put("voice", "ash")
-                OutputStreamWriter(conn.outputStream).use {{ it.write(b.toString()) }}
-                if (conn.responseCode in 200..299) {{
-                    val f = java.io.File(cacheDir, "apex_ash.mp3")
-                    conn.inputStream.use {{ inp -> f.outputStream().use {{ out -> inp.copyTo(out) }} }}
-                    mainHandler.post {{
-                        try {{
-                            player?.release()
-                            player = android.media.MediaPlayer().apply {{
-                                setDataSource(f.absolutePath)
-                                setOnCompletionListener {{ isSpeaking = false; if (isListeningActive) startListeningCycle() }}
-                                setOnErrorListener {{ _, _, _ -> isSpeaking = false; if (isListeningActive) startListeningCycle(); true }}
-                                prepare()
-                                start()
-                            }}
-                        }} catch (_: Exception) {{ fallbackMaleTts(c) }}
-                    }}
-                    return@thread
-                }}
+                val ru = tts?.voices?.filter {{ it.locale.language == "ru" }} ?: emptyList()
+                val male = ru.firstOrNull {{ it.name.contains("rud", true) || it.name.contains("dfc", true) || it.name.contains("male", true) }} ?: ru.maxByOrNull {{ it.quality }}
+                if (male != null) tts?.voice = male
             }} catch (_: Exception) {{}}
-            mainHandler.post {{ fallbackMaleTts(c) }}
+            tts?.setPitch(0.95f)
+            tts?.setSpeechRate(1.10f)
+            tts?.speak(c, TextToSpeech.QUEUE_FLUSH, Bundle(), "APEX_U")
+            startStopListener()
         }}
     }}
 
-    private fun fallbackMaleTts(c: String) {{
+    private fun startStopListener() {{
+        if (!isSpeaking) return
         try {{
-            val ru = tts?.voices?.filter {{ it.locale.language == "ru" }} ?: emptyList()
-            val male = ru.firstOrNull {{ it.name.contains("rud", true) || it.name.contains("dfc", true) || it.name.contains("male", true) }} ?: ru.maxByOrNull {{ it.quality }}
-            if (male != null) tts?.voice = male
+            speechRecognizer?.destroy()
+            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
+            speechRecognizer?.setRecognitionListener(object : RecognitionListener {{
+                override fun onReadyForSpeech(p: Bundle?) {{}}
+                override fun onBeginningOfSpeech() {{}}
+                override fun onRmsChanged(r: Float) {{}}
+                override fun onBufferReceived(b: ByteArray?) {{}}
+                override fun onEndOfSpeech() {{}}
+                override fun onEvent(e: Int, p: Bundle?) {{}}
+                override fun onError(e: Int) {{ if (isSpeaking) mainHandler.postDelayed({{ startStopListener() }}, 200L) }}
+                override fun onResults(r: Bundle?) {{ if (isSpeaking) startStopListener() }}
+                override fun onPartialResults(p: Bundle?) {{
+                    val txt = p?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.lowercase(Locale.getDefault()) ?: ""
+                    if (txt.contains("стоп") || txt.contains("хватит") || txt.contains("молчи") || txt.contains("заткнись")) {{
+                        try {{ tts?.stop() }} catch (_: Exception) {{}}
+                        isSpeaking = false
+                        if (isListeningActive) startListeningCycle()
+                    }}
+                }}
+            }})
+            val ri = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {{
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            }}
+            speechRecognizer?.startListening(ri)
         }} catch (_: Exception) {{}}
-        tts?.setPitch(0.95f); tts?.setSpeechRate(1.08f)
-        tts?.speak(c, TextToSpeech.QUEUE_FLUSH, Bundle(), "APEX_U")
     }}
 '''
 code4 = rf'''
@@ -348,7 +349,7 @@ code5 = rf'''
                 startForeground(1, nb.setContentTitle("Apex AI").setContentText("Активен • Скажите «Апекс»").setSmallIcon(android.R.drawable.ic_btn_speak_now).build())
                 isListeningActive = true; startListeningCycle()
             }}
-            "STOP_VOICE" -> {{ isListeningActive = false; isSpeaking = false; try {{ speechRecognizer?.destroy() }} catch (_: Exception) {{}}; try {{ player?.release() }} catch (_: Exception) {{}}; stopForeground(true); stopSelf() }}
+            "STOP_VOICE" -> {{ isListeningActive = false; isSpeaking = false; try {{ speechRecognizer?.destroy() }} catch (_: Exception) {{}}; stopForeground(true); stopSelf() }}
         }}
         return START_STICKY
     }}
@@ -397,11 +398,12 @@ code5 = rf'''
     }}
 
     override fun onBind(intent: Intent?) = null
-    override fun onDestroy() {{ isListeningActive = false; try {{ speechRecognizer?.destroy() }} catch (_: Exception) {{}}; try {{ player?.release() }} catch (_: Exception) {{}}; try {{ tts?.shutdown() }} catch (_: Exception) {{}}; super.onDestroy() }}
+    override fun onDestroy() {{ isListeningActive = false; try {{ speechRecognizer?.destroy() }} catch (_: Exception) {{}}; try {{ tts?.shutdown() }} catch (_: Exception) {{}}; super.onDestroy() }}
 }}
 '''
 
 open(p, "w").write(s + code1 + code2 + code3 + code4 + code5)
+
 ns = base64.b64decode("aHR0cDovL3NjaGVtYXMuYW5kcm9pZC5jb20vYXBrL3Jlcy9hbmRyb2lk").decode()
 perms = ["RECORD_AUDIO", "INTERNET", "CAMERA", "CALL_PHONE", "SYSTEM_ALERT_WINDOW", "FOREGROUND_SERVICE", "FOREGROUND_SERVICE_MICROPHONE", "POST_NOTIFICATIONS", "REQUEST_INSTALL_PACKAGES", "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS", "QUERY_ALL_PACKAGES", "com.android.alarm.permission.SET_ALARM"]
 p_xml = "\n".join([f'    <uses-permission android:name="android.permission.{x}" />' if "." not in x else f'    <uses-permission android:name="{x}" />' for x in perms])
