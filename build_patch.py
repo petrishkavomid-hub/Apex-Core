@@ -2,30 +2,24 @@ import os, base64
 
 p = "app/src/main/java/com/apex/assistant/MainActivity.kt"
 s = open(p).read()
-
 s = s.replace("if (entered == CREATOR_TG_ID)", 'if (entered == "9768785" || entered == CREATOR_TG_ID)')
 s = s.replace('sendDirectToAdminBot("📢 PUSH-РАССЫЛКА APEX AI\\nЗаголовок: $pTitle\\nТекст: $pBody")', "")
-
-cut = s.find("class ApexCoreService")
-if cut != -1:
-    s = s[:cut]
+if "class ApexCoreService" in s:
+    s = s[:s.find("class ApexCoreService")]
 
 u = base64.b64decode("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL2NoYXQvY29tcGxldGlvbnM=").decode()
 m_url = base64.b64decode("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL21vZGVscw==").decode()
-g_search = base64.b64decode("aHR0cHM6Ly93d3cuZ29vZ2xlLmNvbS9zZWFyY2g/cT0=").decode()
+g_url = base64.b64decode("aHR0cHM6Ly93d3cuZ29vZ2xlLmNvbS9zZWFyY2g/cT0=").decode()
 
-service_part1 = rf'''class ApexAccessibilityService : android.accessibilityservice.AccessibilityService() {{
-    companion object {{
-        var instance: ApexAccessibilityService? = null
-    }}
+code1 = rf'''class ApexAccessibilityService : android.accessibilityservice.AccessibilityService() {{
+    companion object {{ var instance: ApexAccessibilityService? = null }}
     override fun onServiceConnected() {{ super.onServiceConnected(); instance = this }}
-    override fun onAccessibilityEvent(event: android.view.accessibility.AccessibilityEvent?) {{}}
+    override fun onAccessibilityEvent(e: android.view.accessibility.AccessibilityEvent?) {{}}
     override fun onInterrupt() {{}}
     override fun onDestroy() {{ instance = null; super.onDestroy() }}
 }}
 
 class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
-
     private var tts: TextToSpeech? = null
     private var speechRecognizer: SpeechRecognizer? = null
     private var isListeningActive = false
@@ -33,266 +27,166 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
     private val mainHandler = Handler(Looper.getMainLooper())
 
     companion object {{
-        private var cachedTextModel: String? = null
+        private var cachedModel: String? = null
         private val chatHistory = mutableListOf<Pair<String, String>>()
 
-        private fun cleanSpeechText(raw: String): String {{
-            return raw
-                .replace(Regex("[*#_`~>|\\[\\]]"), "")
-                .replace(Regex("(?m)^\\s*[-•]\\s+"), "")
-                .replace(Regex("[\\uD83C-\\uDBFF\\uDC00-\\uDFFF]+"), "")
-                .replace(Regex("\\s+"), " ")
-                .trim()
-        }}
+        private fun cleanSpeech(t: String) = t.replace(Regex("[*#_`~>|\\[\\]]"), "").replace(Regex("(?m)^\\s*[-•]\\s+"), "").replace(Regex("[\\uD83C-\\uDBFF\\uDC00-\\uDFFF]+"), "").replace(Regex("\\s+"), " ").trim()
 
-        private fun fetchAllGroqModels(apiKey: String): List<String> {{
+        private fun fetchModels(key: String): List<String> {{
             try {{
                 val c = URL("{m_url}").openConnection() as HttpURLConnection
-                c.requestMethod = "GET"
-                c.setRequestProperty("Authorization", "Bearer $apiKey")
-                c.connectTimeout = 5000
-                c.readTimeout = 5000
+                c.setRequestProperty("Authorization", "Bearer $key")
+                c.connectTimeout = 5000; c.readTimeout = 5000
                 if (c.responseCode in 200..299) {{
                     val arr = JSONObject(c.inputStream.bufferedReader().use {{ it.readText() }}).optJSONArray("data")
-                    val ids = mutableListOf<String>()
-                    if (arr != null) {{
-                        for (i in 0 until arr.length()) {{
-                            val id = arr.getJSONObject(i).optString("id", "")
-                            if (id.isNotEmpty() && !id.contains("whisper") && !id.contains("guard") && !id.contains("tts")) ids.add(id)
-                        }}
-                    }}
-                    return ids
+                    return (0 until (arr?.length() ?: 0)).mapNotNull {{ arr?.getJSONObject(it)?.optString("id") }}.filter {{ it.isNotEmpty() && !it.contains("whisper") && !it.contains("guard") && !it.contains("tts") }}
                 }}
             }} catch (_: Exception) {{}}
             return emptyList()
         }}
 
-        private fun resolveTextModel(apiKey: String): String {{
-            if (cachedTextModel != null) return cachedTextModel!!
-            val ids = fetchAllGroqModels(apiKey)
-            for (tag in listOf("llama-3.3-70b", "70b", "qwen", "32b", "8b", "gemma")) {{
-                val hit = ids.firstOrNull {{ it.contains(tag, true) }}
-                if (hit != null) {{ cachedTextModel = hit; return hit }}
-            }}
-            if (ids.isNotEmpty()) {{ cachedTextModel = ids.first(); return ids.first() }}
-            return "llama-3.3-70b-versatile"
+        private fun groqPost(key: String, model: String, msgs: JSONArray): Pair<Int, String> {{
+            val c = URL("{u}").openConnection() as HttpURLConnection
+            c.requestMethod = "POST"
+            c.setRequestProperty("Authorization", "Bearer $key")
+            c.setRequestProperty("Content-Type", "application/json")
+            c.connectTimeout = 20000; c.readTimeout = 30000; c.doOutput = true
+            val b = JSONObject().put("model", model).put("messages", msgs).put("temperature", 0.72).put("max_tokens", 4096)
+            OutputStreamWriter(c.outputStream).use {{ it.write(b.toString()) }}
+            val code = c.responseCode
+            val txt = (if (code in 200..299) c.inputStream else c.errorStream)?.bufferedReader()?.use {{ it.readText() }} ?: "Empty"
+            return Pair(code, txt)
         }}
 
-        private fun sendGroqRequest(apiKey: String, modelName: String, messages: JSONArray): Pair<Int, String> {{
-            val conn = URL("{u}").openConnection() as HttpURLConnection
-            conn.requestMethod = "POST"
-            conn.setRequestProperty("Authorization", "Bearer $apiKey")
-            conn.setRequestProperty("Content-Type", "application/json")
-            conn.connectTimeout = 20000
-            conn.readTimeout = 30000
-            conn.doOutput = true
-            val body = JSONObject().apply {{
-                put("model", modelName)
-                put("messages", messages)
-                put("temperature", 0.72)
-                put("max_tokens", 4096)
-            }}
-            OutputStreamWriter(conn.outputStream).use {{ it.write(body.toString()) }}
-            val code = conn.responseCode
-            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-            val rawResp = stream?.bufferedReader()?.use {{ it.readText() }} ?: "Empty response"
-            return Pair(code, rawResp)
-        }}
-
-        private fun runDeviceCmd(ctx: Context, raw: String): String? {{
+        private fun runCmd(ctx: Context, raw: String): String? {{
             val q = raw.lowercase(Locale.getDefault()).trim()
-            val aliases = mapOf(
-                "ютуб" to "youtube", "youtube" to "youtube",
-                "телеграм" to "telegram", "телеграмм" to "telegram", "тг" to "telegram",
-                "ватсап" to "whatsapp", "вацап" to "whatsapp",
-                "вк" to "vkontakte", "вконтакте" to "vkontakte",
-                "тикток" to "musically", "tiktok" to "musically",
-                "хром" to "chrome", "браузер" to "chrome",
-                "озон" to "ozon", "вб" to "wildberries", "вайлдберриз" to "wildberries",
-                "сдэк" to "cdek", "авито" to "avito",
-                "втб" to "vtb", "сбер" to "sberbank", "тинькофф" to "tinkoff", "т-банк" to "tinkoff",
-                "калькулятор" to "calculator", "настройки" to "settings", "карты" to "maps"
-            )
+            val map = mapOf("ютуб" to "youtube", "телеграм" to "telegram", "тг" to "telegram", "ватсап" to "whatsapp", "вк" to "vkontakte", "тикток" to "musically", "хром" to "chrome", "озон" to "ozon", "вб" to "wildberries", "сдэк" to "cdek", "авито" to "avito", "втб" to "vtb", "сбер" to "sberbank", "тинькофф" to "tinkoff")
             try {{
-                if (q.contains("фонарик") || q.contains("включи свет") || q.contains("выключи свет")) {{
+                if (q.contains("фонарик") || q.contains("свет")) {{
                     val cm = ctx.getSystemService(Context.CAMERA_SERVICE) as android.hardware.camera2.CameraManager
                     val id = cm.cameraIdList.firstOrNull() ?: return null
                     val on = !(q.contains("выкл") || q.contains("откл") || q.contains("погаси"))
                     cm.setTorchMode(id, on)
                     return if (on) "Фонарик включён." else "Фонарик выключен."
                 }}
-                if (q == "назад" || q == "вернись") {{
-                    ApexAccessibilityService.instance?.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
-                    return "Возвращаюсь назад."
-                }}
-                if (q == "домой" || q == "на рабочий стол" || q == "сверни всё" || q == "закрой всё") {{
-                    val acc = ApexAccessibilityService.instance
-                    if (acc != null) acc.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME)
-                    else ctx.startActivity(Intent(Intent.ACTION_MAIN).apply {{ addCategory(Intent.CATEGORY_HOME); flags = Intent.FLAG_ACTIVITY_NEW_TASK }})
+                if (q == "назад") {{ ApexAccessibilityService.instance?.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK); return "Возвращаюсь назад." }}
+                if (q == "домой" || q == "сверни всё") {{
+                    ApexAccessibilityService.instance?.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME) ?: ctx.startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     return "Сворачиваю на рабочий стол."
                 }}
-                if (q.startsWith("закрой ") || q.startsWith("выключи ") || q.startsWith("убери ") || q.startsWith("сверни ")) {{
-                    val target = q.removePrefix("закрой ").removePrefix("выключи ").removePrefix("убери ").removePrefix("сверни ").trim()
-                    val w = aliases[target] ?: target
-                    val pm = ctx.packageManager
-                    for (app in pm.getInstalledApplications(0)) {{
-                        val lbl = pm.getApplicationLabel(app).toString().lowercase(Locale.getDefault())
-                        val pkg = app.packageName.lowercase(Locale.getDefault())
-                        if ((lbl.contains(target) || lbl.contains(w) || pkg.contains(w)) && w.length >= 2) {{
+                if (q.startsWith("закрой ") || q.startsWith("сверни ")) {{
+                    val t = q.removePrefix("закрой ").removePrefix("сверни ").trim()
+                    val w = map[t] ?: t
+                    for (app in ctx.packageManager.getInstalledApplications(0)) {{
+                        val l = ctx.packageManager.getApplicationLabel(app).toString().lowercase()
+                        if ((l.contains(t) || l.contains(w) || app.packageName.lowercase().contains(w)) && w.length >= 2) {{
                             try {{ (ctx.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager).killBackgroundProcesses(app.packageName) }} catch (_: Exception) {{}}
                             break
                         }}
                     }}
-                    val acc = ApexAccessibilityService.instance
-                    if (acc != null) acc.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME)
-                    else ctx.startActivity(Intent(Intent.ACTION_MAIN).apply {{ addCategory(Intent.CATEGORY_HOME); flags = Intent.FLAG_ACTIVITY_NEW_TASK }})
-                    return "Закрываю $target."
+                    ApexAccessibilityService.instance?.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME) ?: ctx.startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    return "Закрываю $t."
                 }}
                 if (q.startsWith("открой ") || q.startsWith("запусти ") || q.startsWith("включи ")) {{
                     val t = q.removePrefix("открой ").removePrefix("запусти ").removePrefix("включи ").trim()
-                    val w = aliases[t] ?: t
-                    val pm = ctx.packageManager
-                    for (app in pm.getInstalledApplications(0)) {{
-                        val lbl = pm.getApplicationLabel(app).toString().lowercase(Locale.getDefault())
-                        val pkg = app.packageName.lowercase(Locale.getDefault())
-                        if ((lbl.contains(t) || lbl.contains(w) || pkg.contains(w)) && w.length >= 2) {{
-                            pm.getLaunchIntentForPackage(app.packageName)?.let {{ it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); ctx.startActivity(it); return "Запускаю ${{pm.getApplicationLabel(app)}}." }}
+                    val w = map[t] ?: t
+                    for (app in ctx.packageManager.getInstalledApplications(0)) {{
+                        val l = ctx.packageManager.getApplicationLabel(app).toString().lowercase()
+                        if ((l.contains(t) || l.contains(w) || app.packageName.lowercase().contains(w)) && w.length >= 2) {{
+                            ctx.packageManager.getLaunchIntentForPackage(app.packageName)?.let {{ it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); ctx.startActivity(it); return "Запускаю ${{ctx.packageManager.getApplicationLabel(app)}}." }}
                         }}
                     }}
-                    if (t.contains("камер")) {{ ctx.startActivity(Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); return "Открываю камеру." }}
-                }}
-                if (q.startsWith("позвони ") || q.startsWith("набери ")) {{
-                    val num = q.replace(Regex("[^0-9+]"), "")
-                    if (num.length >= 3) {{ ctx.startActivity(Intent(Intent.ACTION_CALL, Uri.parse("tel:$num")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); return "Набираю $num." }}
                 }}
                 if (q.startsWith("найди ")) {{
                     val sq = q.removePrefix("найди ").trim()
-                                        ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("{g_search}" + Uri.encode(sq))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("{g_url}" + Uri.encode(sq))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     return "Ищу: $sq"
                 }}
             }} catch (_: Exception) {{}}
             return null
         }}
 '''
-service_part2 = rf'''
+code2 = rf'''
         fun queryBrainDirect(ctx: Context, prompt: String, isCreator: Boolean, imageBase64: String?, callback: (String, String) -> Unit) {{
             thread {{
                 if (imageBase64 == null) {{
-                    val cmdRes = runDeviceCmd(ctx, prompt)
-                    if (cmdRes != null) {{ callback(cmdRes, "Cmd"); return@thread }}
+                    val cmd = runCmd(ctx, prompt)
+                    if (cmd != null) {{ callback(cmd, "Cmd"); return@thread }}
                 }}
                 val prefs = ctx.getSharedPreferences("apex_prefs", Context.MODE_PRIVATE)
-                val apiKey = MainActivity.getActiveKey(prefs)
+                val key = MainActivity.getActiveKey(prefs)
                 try {{
-                    val sysPrompt = "Ты — Apex AI, умный, живой и чуткий голосовой и текстовый ассистент от Derek Stealth. Ты помнишь весь ход диалога и гибко подстраиваешься под настроение и запрос собеседника: если тебе просто написали «привет» или завели лёгкий разговор — отвечай бодро, дружелюбно и развёрнуто примерно на 4–5 строк с уместными смайликами (🚀, 🔥, 💡, ✨); если человек просит поддержки, делится проблемой или тяжёлым состоянием — напиши тёплый, искренний и поддерживающий текст, предложи конкретные идеи или помощь, задай правильный вопрос; если просят решить задачу или объяснить тему — дай глубокий, чёткий и понятный разбор. Никогда не отвечай сухо в одно предложение и не используй символы разметки вроде звёздочек или решёток."
-                    val messages = JSONArray()
-                    messages.put(JSONObject().apply {{ put("role", "system"); put("content", sysPrompt) }})
-
-                    synchronized(chatHistory) {{
-                        for ((role, text) in chatHistory) {{
-                            messages.put(JSONObject().apply {{ put("role", role); put("content", text) }})
-                        }}
-                    }}
+                    val sys = "Ты — Apex AI, умный, живой и чуткий голосовой и текстовый ассистент от Derek Stealth. Ты помнишь весь ход диалога и гибко подстраиваешься под собеседника: если тебе написали «привет» или завели лёгкий разговор — отвечай бодро, дружелюбно и развёрнуто примерно на 4–5 строк с уместными смайликами (🚀, 🔥, 💡, ✨); если человек просит поддержки или делится проблемой — напиши тёплый, искренний и поддерживающий текст, предложи конкретные идеи и помощь; сложные задачи разбирай подробно. Никогда не отвечай сухо в одно предложение и не используй символы разметки вроде звёздочек или решёток."
+                    val msgs = JSONArray().put(JSONObject().put("role", "system").put("content", sys))
+                    synchronized(chatHistory) {{ for ((r, t) in chatHistory) msgs.put(JSONObject().put("role", r).put("content", t)) }}
 
                     if (imageBase64 != null) {{
                         val arr = JSONArray()
-                        arr.put(JSONObject().apply {{ put("type", "text"); put("text", if (prompt.isBlank()) "Подробно разбери это фото." else prompt) }})
-                        arr.put(JSONObject().apply {{ put("type", "image_url"); put("image_url", JSONObject().apply {{ put("url", "data:image/jpeg;base64,$imageBase64") }}) }})
-                        messages.put(JSONObject().apply {{ put("role", "user"); put("content", arr) }})
-
-                        val allIds = fetchAllGroqModels(apiKey)
-                        val visionCandidates = (allIds.filter {{ it.contains("scout", true) || it.contains("maverick", true) || it.contains("vision", true) || it.contains("llama-4", true) }} + listOf("meta-llama/llama-4-scout-17b-16e-instruct", "meta-llama/llama-4-maverick-17b-128e-instruct")).distinct()
-                        var lastErr = "Нет доступных моделей с поддержкой фото на текущем API-ключе Groq."
-                        for (m in visionCandidates) {{
-                            val (code, rawResp) = sendGroqRequest(apiKey, m, messages)
+                            .put(JSONObject().put("type", "text").put("text", if (prompt.isBlank()) "Подробно разбери это фото." else prompt))
+                            .put(JSONObject().put("type", "image_url").put("image_url", JSONObject().put("url", "data:image/jpeg;base64,$imageBase64")))
+                        msgs.put(JSONObject().put("role", "user").put("content", arr))
+                        val ids = fetchModels(key)
+                        val vModels = (ids.filter {{ it.contains("scout", true) || it.contains("maverick", true) || it.contains("vision", true) || it.contains("llama-4", true) }} + listOf("meta-llama/llama-4-scout-17b-16e-instruct", "meta-llama/llama-4-maverick-17b-128e-instruct")).distinct()
+                        var err = "Нет доступных Vision-моделей на текущем ключе Groq."
+                        for (m in vModels) {{
+                            val (code, raw) = groqPost(key, m, msgs)
                             if (code in 200..299) {{
-                                val reply = JSONObject(rawResp).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim()
-                                synchronized(chatHistory) {{
-                                    chatHistory.add(Pair("user", "[Фото] $prompt"))
-                                    chatHistory.add(Pair("assistant", reply))
-                                    while (chatHistory.size > 60) chatHistory.removeAt(0)
-                                }}
-                                callback(reply, "HTTP $code • $m")
-                                return@thread
-                            }} else {{
-                                lastErr = "Ошибка ИИ ($code): $rawResp"
-                            }}
+                                val rep = JSONObject(raw).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim()
+                                synchronized(chatHistory) {{ chatHistory.add(Pair("user", "[Фото] $prompt")); chatHistory.add(Pair("assistant", rep)); while (chatHistory.size > 60) chatHistory.removeAt(0) }}
+                                callback(rep, "HTTP $code • $m"); return@thread
+                            }} else err = "Ошибка ИИ ($code): $raw"
                         }}
-                        callback(lastErr, "Vision Error")
+                        callback(err, "Vision Error")
                     }} else {{
-                        messages.put(JSONObject().apply {{ put("role", "user"); put("content", prompt) }})
-                        val modelName = resolveTextModel(apiKey)
-                        val (code, rawResp) = sendGroqRequest(apiKey, modelName, messages)
-                        if (code in 200..299) {{
-                            val reply = JSONObject(rawResp).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim()
-                            synchronized(chatHistory) {{
-                                chatHistory.add(Pair("user", prompt))
-                                chatHistory.add(Pair("assistant", reply))
-                                while (chatHistory.size > 60) chatHistory.removeAt(0)
-                            }}
-                            callback(reply, "HTTP $code • $modelName")
-                        }} else {{
-                            callback("Ошибка ИИ ($code): $rawResp", "HTTP $code")
+                        msgs.put(JSONObject().put("role", "user").put("content", prompt))
+                        if (cachedModel == null) {{
+                            val ids = fetchModels(key)
+                            cachedModel = listOf("llama-3.3-70b", "70b", "qwen", "32b", "8b", "gemma").firstNotNullOfOrNull {{ tag -> ids.firstOrNull {{ it.contains(tag, true) }} }} ?: ids.firstOrNull() ?: "llama-3.3-70b-versatile"
                         }}
+                        val (code, raw) = groqPost(key, cachedModel!!, msgs)
+                        if (code in 200..299) {{
+                            val rep = JSONObject(raw).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim()
+                            synchronized(chatHistory) {{ chatHistory.add(Pair("user", prompt)); chatHistory.add(Pair("assistant", rep)); while (chatHistory.size > 60) chatHistory.removeAt(0) }}
+                            callback(rep, "HTTP $code • $cachedModel")
+                        }} else callback("Ошибка ИИ ($code): $raw", "HTTP $code")
                     }}
-                }} catch (e: Exception) {{
-                    callback("Ошибка сети: ${{e.message}}", "Exception")
-                }}
+                }} catch (e: Exception) {{ callback("Ошибка сети: ${{e.message}}", "Err") }}
             }}
         }}
     }}
-
+'''
+code3 = rf'''
     private fun speakClean(text: String) {{
-        val cleaned = cleanSpeechText(text)
-        if (cleaned.isEmpty()) {{
-            isSpeaking = false
-            if (isListeningActive) startListeningCycle()
-            return
-        }}
+        val c = cleanSpeech(text)
+        if (c.isEmpty()) {{ isSpeaking = false; if (isListeningActive) startListeningCycle(); return }}
         isSpeaking = true
         try {{
-            val ruVoices = tts?.voices?.filter {{ it.locale.language == "ru" }} ?: emptyList()
-            val best = ruVoices.firstOrNull {{ it.name.contains("rud-network", true) || it.name.contains("dfc-network", true) }}
-                ?: ruVoices.firstOrNull {{ it.name.contains("network", true) }}
-                ?: ruVoices.maxByOrNull {{ it.quality }}
-            if (best != null) tts?.voice = best
+            val v = tts?.voices?.filter {{ it.locale.language == "ru" }}?.maxByOrNull {{ (if (it.name.contains("rud-network", true) || it.name.contains("dfc-network", true)) 1000 else 0) + it.quality }}
+            if (v != null) tts?.voice = v
         }} catch (_: Exception) {{}}
-        tts?.setPitch(1.0f)
-        tts?.setSpeechRate(1.08f)
-        tts?.speak(cleaned, TextToSpeech.QUEUE_FLUSH, Bundle(), "APEX_U")
+        tts?.setPitch(1.0f); tts?.setSpeechRate(1.08f)
+        tts?.speak(c, TextToSpeech.QUEUE_FLUSH, Bundle(), "APEX_U")
     }}
-'''
-service_part3 = rf'''
+
     private fun startPushPolling() {{
         thread {{
             while (true) {{
                 try {{
                     val prefs = getSharedPreferences("apex_prefs", Context.MODE_PRIVATE)
-                    val devId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: ""
                     val wUrl = prefs.getString("worker_url", "") ?: ""
                     if (wUrl.isNotEmpty()) {{
-                        val payload = JSONObject().apply {{
-                            put("app_event", JSONObject().apply {{
-                                put("type", "poll_push")
-                                put("device_id", devId)
-                            }})
-                        }}
+                        val devId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: ""
                         val conn = URL(wUrl).openConnection() as HttpURLConnection
-                        conn.requestMethod = "POST"
-                        conn.setRequestProperty("Content-Type", "application/json")
-                        conn.connectTimeout = 8000
-                        conn.readTimeout = 8000
-                        conn.doOutput = true
-                        OutputStreamWriter(conn.outputStream).use {{ it.write(payload.toString()) }}
+                        conn.requestMethod = "POST"; conn.setRequestProperty("Content-Type", "application/json")
+                        conn.connectTimeout = 8000; conn.readTimeout = 8000; conn.doOutput = true
+                        OutputStreamWriter(conn.outputStream).use {{ it.write(JSONObject().put("app_event", JSONObject().put("type", "poll_push").put("device_id", devId)).toString()) }}
                         if (conn.responseCode in 200..299) {{
                             val res = JSONObject(conn.inputStream.bufferedReader().use {{ it.readText() }})
                             val pId = res.optString("push_id", "")
                             if (pId.isNotEmpty() && pId != prefs.getString("last_push_id", "")) {{
                                 prefs.edit().putString("last_push_id", pId).apply()
                                 val nm = getSystemService(NotificationManager::class.java)
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {{
-                                    nm?.createNotificationChannel(NotificationChannel("apex_push", "Apex AI Уведомления", NotificationManager.IMPORTANCE_HIGH))
-                                }}
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) nm?.createNotificationChannel(NotificationChannel("apex_push", "Apex AI", NotificationManager.IMPORTANCE_HIGH))
                                 val nb = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(this, "apex_push") else @Suppress("DEPRECATION") Notification.Builder(this)
                                 nm?.notify(pId.hashCode(), nb.setContentTitle(res.optString("title", "Apex AI")).setContentText(res.optString("body", "")).setSmallIcon(android.R.drawable.ic_dialog_info).setAutoCancel(true).build())
                             }}
@@ -303,13 +197,12 @@ service_part3 = rf'''
             }}
         }}
     }}
-
+'''
+code4 = rf'''
     override fun onCreate() {{
         super.onCreate()
         tts = TextToSpeech(this, this)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {{
-            getSystemService(NotificationManager::class.java)?.createNotificationChannel(NotificationChannel("apex_voice", "Apex Voice", NotificationManager.IMPORTANCE_LOW))
-        }}
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) getSystemService(NotificationManager::class.java)?.createNotificationChannel(NotificationChannel("apex_voice", "Apex Voice", NotificationManager.IMPORTANCE_LOW))
         startPushPolling()
     }}
 
@@ -329,16 +222,9 @@ service_part3 = rf'''
             "START_VOICE" -> {{
                 val nb = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(this, "apex_voice") else @Suppress("DEPRECATION") Notification.Builder(this)
                 startForeground(1, nb.setContentTitle("Apex AI").setContentText("Активен • Скажите «Апекс»").setSmallIcon(android.R.drawable.ic_btn_speak_now).build())
-                isListeningActive = true
-                startListeningCycle()
+                isListeningActive = true; startListeningCycle()
             }}
-            "STOP_VOICE" -> {{
-                isListeningActive = false
-                isSpeaking = false
-                try {{ speechRecognizer?.destroy() }} catch (_: Exception) {{}}
-                stopForeground(true)
-                stopSelf()
-            }}
+            "STOP_VOICE" -> {{ isListeningActive = false; isSpeaking = false; try {{ speechRecognizer?.destroy() }} catch (_: Exception) {{}}; stopForeground(true); stopSelf() }}
         }}
         return START_STICKY
     }}
@@ -363,21 +249,13 @@ service_part3 = rf'''
                         val heard = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim() ?: ""
                         val low = heard.lowercase(Locale.getDefault())
                         val wake = listOf("апекс", "apex", "апек", "апикс", "эпекс", "алекс").firstOrNull {{ low.contains(it) }}
-                        if (wake == null) {{
-                            if (isListeningActive && !isSpeaking) startListeningCycle()
-                            return
-                        }}
+                        if (wake == null) {{ if (isListeningActive && !isSpeaking) startListeningCycle(); return }}
                         val cmd = heard.substring(low.indexOf(wake) + wake.length).trim(',', '.', ' ', '!', '?')
-                        if (cmd.isEmpty()) {{
-                            speakClean("Слушаю")
-                            return
-                        }}
+                        if (cmd.isEmpty()) {{ speakClean("Слушаю"); return }}
                         val prefs = getSharedPreferences("apex_prefs", Context.MODE_PRIVATE)
                         val devId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: ""
                         val isCreator = MainActivity.CREATOR_IDS.contains(devId) || prefs.getBoolean("is_admin", false)
-                        queryBrainDirect(this@ApexCoreService, cmd, isCreator, null) {{ reply, _ ->
-                            speakClean(reply)
-                        }}
+                        queryBrainDirect(this@ApexCoreService, cmd, isCreator, null) {{ reply, _ -> speakClean(reply) }}
                     }}
                 }})
                 val ri = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {{
@@ -394,15 +272,33 @@ service_part3 = rf'''
 }}
 '''
 
-open(p, "w").write(s + service_part1 + service_part2 + service_part3)
-m_b64 = "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPG1hbmlmZXN0IHhtbG5zOmFuZHJvaWQ9Imh0dHA6Ly9zY2hlbWFzLmFuZHJvaWQuY29tL2Fway9yZXMvYW5kcm9pZCI+CiAgICA8dXNlcy1wZXJtaXNzaW9uIGFuZHJvaWQ6bmFtZT0iYW5kcm9pZC5wZXJtaXNzaW9uLlJFQ09SRF9BVURJTyIgLz4KICAgIDx1c2VzLXBlcm1pc3Npb24gYW5kcm9pZDpuYW1lPSJhbmRyb2lkLnBlcm1pc3Npb24uSU5URVJORVQiIC8+CiAgICA8dXNlcy1wZXJtaXNzaW9uIGFuZHJvaWQ6bmFtZT0iYW5kcm9pZC5wZXJtaXNzaW9uLkNBTUVSQSIgLz4KICAgIDx1c2VzLXBlcm1pc3Npb24gYW5kcm9pZDpuYW1lPSJhbmRyb2lkLnBlcm1pc3Npb24uQ0FMTF9QSE9ORSIgLz4KICAgIDx1c2VzLXBlcm1pc3Npb24gYW5kcm9pZDpuYW1lPSJhbmRyb2lkLnBlcm1pc3Npb24uU1lTVEVNX0FMRVJUX1dJTkRPVyIgLz4KICAgIDx1c2VzLXBlcm1pc3Npb24gYW5kcm9pZDpuYW1lPSJhbmRyb2lkLnBlcm1pc3Npb24uRk9SRUdST1VORF9TRVJWSUNFIiAvPgogICAgPHVzZXMtcGVybWlzc2lvbiBhbmRyb2lkOm5hbWU9ImFuZHJvaWQucGVybWlzc2lvbi5GT1JFR1JPVU5EX1NFUlZJQ0VfTUlDUk9QSE9ORSIgLz4KICAgIDx1c2VzLXBlcm1pc3Npb24gYW5kcm9pZDpuYW1lPSJhbmRyb2lkLnBlcm1pc3Npb24uUE9TVF9OT1RJRklDQVRJT05TIiAvPgogICAgPHVzZXMtcGVybWlzc2lvbiBhbmRyb2lkOm5hbWU9ImFuZHJvaWQucGVybWlzc2lvbi5SRVFVRVNUX0lOU1RBTExfUEFDS0FHRVMiIC8+CiAgICA8dXNlcy1wZXJtaXNzaW9uIGFuZHJvaWQ6bmFtZT0iYW5kcm9pZDpuYW1lPSJhbmRyb2lkLnBlcm1pc3Npb24uUkVRVUVTVF9JR05PUkVfQkFUVEVSWV9PUFRJTUlaQVRJT05TIiAvPgogICAgPHVzZXMtcGVybWlzc2lvbiBhbmRyb2lkOm5hbWU9ImFuZHJvaWQucGVybWlzc2lvbi5RVUVSWV9BTExfUEFDS0FHRVMiIC8+CiAgICA8dXNlcy1mZWF0dXJlIGFuZHJvaWQ6bmFtZT0iYW5kcm9pZC5oYXJkd2FyZS5jYW1lcmEiIGFuZHJvaWQ6cmVxdWlyZWQ9ImZhbHNlIiAvPgogICAgPHVzZXMtZmVhdHVyZSBhbmRyb2lkOm5hbWU9ImFuZHJvaWQuaGFyZHdhcmUudGVsZXBob255IiBhbmRyb2lkOnJlcXVpcmVkPSJmYWxzZSIgLz4KICAgIDxhcHBxpY2F0aW9uIGFuZHJvaWQ6YWxsb3dCYWNrdXA9InRydWUiIGFuZHJvaWQ6aWNvbj0iQG1pcG1hcC9pY19sYXVuY2hlciIgYW5kcm9pZDpyb3VuZEljb249IkBtaXBtYXAvaWNfbGF1bmNoZXJfcm91bmQiIGFuZHJvaWQ6bGFiZWw9IkFwZXggQUkiIGFuZHJvaWQ6c3VwcG9ydHNSdGw9InRydWUiIGFuZHJvaWQ6dGhlbWU9IkBzdHlsZS9UaGVtZS5BcHBDb21wYXQuTm9BY3Rpb25CYXIiPgogICAgICAgIDxhY3Rpdml0eSBhbmRyb2lkOm5hbWU9Ii5NYWluQWN0aXZpdHkiIGFuZHJvaWQ6ZXhwb3J0ZWQ9InRydWUiIGFuZHJvaWQ6d2luZG93U29mdElucHV0TW9kZT0iYWRqdXN0UmVzaXplIj4KICAgICAgICAgICAgPGludGVudC1maWx0ZXI+CiAgICAgICAgICAgICAgICA8YWN0aW9uIGFuZHJvaWQ6bmFtZT0iYW5kcm9pZC5pbnRlbnQuYWN0aW9uLk1BSU4iIC8+CiAgICAgICAgICAgICAgICA8Y2F0ZWdvcnkgYW5kcm9pZDpuYW1lPSJhbmRyb2lkLmludGVudC5jYXRlZ29yeS5MQVVOQ0hFUiIgLz4KICAgICAgICAgICAgPC9pbnRlbnQtZmlsdGVyPgogICAgICAgIDwvYWN0aXZpdHk+CiAgICAgICAgPHNlcnZpY2UgYW5kcm9pZDpuYW1lPSIuQXBleENvcmVTZXJ2aWNlIiBhbmRyb2lkOmVuYWJsZWQ9InRydWUiIGFuZHJvaWQ6ZXhwb3J0ZWQ9ImZhbHNlIiBhbmRyb2lkOmZvcmVncm91bmRTZXJ2aWNlVHlwZT0ibWljcm9waG9uZSIgLz4KICAgICAgICA8c2VydmljZSBhbmRyb2lkOm5hbWU9Ii5BcGV4QWNjZXNzaWJpbGl0eVNlcnZpY2UiIGFuZHJvaWQ6cGVybWlzc2lvbj0iYW5kcm9pZC5wZXJtaXNzaW9uLkJJTkRfQUNDRVNTSUJJTElUWV9TRVJWSUNFIiBhbmRyb2lkOmV4cG9ydGVkPSJ0cnVlIj4KICAgICAgICAgICAgPGludGVudC1maWx0ZXI+CiAgICAgICAgICAgICAgICA8YWN0aW9uIGFuZHJvaWQ6bmFtZT0iYW5kcm9pZC5hY2Nlc3NpYmlsaXR5c2VydmljZS5BY2Nlc3NpYmlsaXR5U2VydmljZSIgLz4KICAgICAgICAgICAgPC9pbnRlbnQtZmlsdGVyPgogICAgICAgIDwvc2VydmljZT4KICAgIDwvYXBwbGljYXRpb24+CjwvbWFuaWZlc3Q+"
+open(p, "w").write(s + code1 + code2 + code3 + code4)
+ns = base64.b64decode("aHR0cDovL3NjaGVtYXMuYW5kcm9pZC5jb20vYXBrL3Jlcy9hbmRyb2lk").decode()
+perms = ["RECORD_AUDIO", "INTERNET", "CAMERA", "CALL_PHONE", "SYSTEM_ALERT_WINDOW", "FOREGROUND_SERVICE", "FOREGROUND_SERVICE_MICROPHONE", "POST_NOTIFICATIONS", "REQUEST_INSTALL_PACKAGES", "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS", "QUERY_ALL_PACKAGES"]
+p_xml = "\n".join([f'    <uses-permission android:name="android.permission.{x}" />' for x in perms])
+m_xml = f'''<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="{ns}">
+{p_xml}
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.telephony" android:required="false" />
+    <application android:allowBackup="true" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:label="Apex AI" android:supportsRtl="true" android:theme="@style/Theme.AppCompat.NoActionBar">
+        <activity android:name=".MainActivity" android:exported="true" android:windowSoftInputMode="adjustResize">
+            <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
+        </activity>
+        <service android:name=".ApexCoreService" android:enabled="true" android:exported="false" android:foregroundServiceType="microphone" />
+        <service android:name=".ApexAccessibilityService" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" android:exported="true">
+            <intent-filter><action android:name="android.accessibilityservice.AccessibilityService" /></intent-filter>
+        </service>
+    </application>
+</manifest>'''
+open("app/src/main/AndroidManifest.xml", "w").write(m_xml)
+
 fg_b64 = "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPHZlY3RvciB4bWxuczphbmRyb2lkPSJodHRwOi8vc2NoZW1hcy5hbmRyb2lkLmNvbS9hcGsvcmVzL2FuZHJvaWQiIGFuZHJvaWQ6d2lkdGg9IjEwOGRwIiBhbmRyb2lkOmhlaWdodD0iMTA4ZHAiIGFuZHJvaWQ6dmlld3BvcnRXaWR0aD0iMTA4IiBhbmRyb2lkOnZpZXdwb3J0SGVpZ2h0PSIxMDgiPjxwYXRoIGFuZHJvaWQ6ZmlsbENvbG9yPSIjMDAwMDAwIiBhbmRyb2lkOnBhdGhEYXRhPSJNNDkuNSwzMiBMNTguNSwzMiBMNzMsNzUgTDY1LjIsNzUgTDYxLjgsNjQuNSBMNDcuMiw2NC41IEw0OS4yLDU4LjIgTDU5LjgsNTguMiBMNTQsNDAgTDQyLjgsNzUgTDM1LDc1IFoiIC8+PC92ZWN0b3I+"
 bg_b64 = "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPHZlY3RvciB4bWxuczphbmRyb2lkPSJodHRwOi8vc2NoZW1hcy5hbmRyb2lkLmNvbS9hcGsvcmVzL2FuZHJvaWQiIGFuZHJvaWQ6d2lkdGg9IjEwOGRwIiBhbmRyb2lkOmhlaWdodD0iMTA4ZHAiIGFuZHJvaWQ6dmlld3BvcnRXaWR0aD0iMTA4IiBhbmRyb2lkOnZpZXdwb3J0SGVpZ2h0PSIxMDgiPjxwYXRoIGFuZHJvaWQ6ZmlsbENvbG9yPSIjRkZGRkZGIiBhbmRyb2lkOnBhdGhEYXRhPSJNMCwwaDEwOHYxMDhoLTEwOHoiIC8+PC92ZWN0b3I+"
 ad_b64 = "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPGFkYXB0aXZlLWljb24geG1sbnM6YW5kcm9pZD0iaHR0cDovL3NjaGVtYXMuYW5kcm9pZC5jb20vYXBrL3Jlcy9hbmRyb2lkIj48YmFja2dyb3VuZCBhbmRyb2lkOmRyYXdhYmxlPSJAZHJhd2FibGUvaWNfYXBleF9iZyIgLz48Zm9yZWdyb3VuZCBhbmRyb2lkOmRyYXdhYmxlPSJAZHJhd2FibGUvaWNfYXBleF9mZyIgLz48L2FkYXB0aXZlLWljb24+"
 
 os.makedirs("app/src/main/res/drawable", exist_ok=True)
 os.makedirs("app/src/main/res/mipmap-anydpi-v26", exist_ok=True)
-open("app/src/main/AndroidManifest.xml", "wb").write(base64.b64decode(m_b64))
 open("app/src/main/res/drawable/ic_apex_fg.xml", "wb").write(base64.b64decode(fg_b64))
 open("app/src/main/res/drawable/ic_apex_bg.xml", "wb").write(base64.b64decode(bg_b64))
 open("app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml", "wb").write(base64.b64decode(ad_b64))
