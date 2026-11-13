@@ -1,0 +1,96 @@
+import urllib.request, json, time, re
+
+TOKEN = "8813383592:AAEq3jtBj3G9qeSr3KRSvUhOEFpmCHYfuog"
+ADMIN = 5347874574
+API = "https://api." + "telegram." + "org/bot" + TOKEN
+
+def tg(method, data=None):
+    req = urllib.request.Request(
+        f"{API}/{method}",
+        data=json.dumps(data).encode() if data else None,
+        headers={"Content-Type": "application/json"}
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=25) as r:
+            return json.loads(r.read().decode())
+    except Exception:
+        return {}
+
+tg("deleteWebhook")
+
+MENU = {
+    "keyboard": [
+        [{"text": "⭐ Оценить Apex AI"}, {"text": "💬 Оставить отзыв"}],
+        [{"text": "💡 Предложить идею"}, {"text": "🛠 Сообщить о баге"}],
+        [{"text": "📥 Скачать Apex AI"}]
+    ],
+    "resize_keyboard": True
+}
+
+STARS = {
+    "inline_keyboard": [[
+        {"text": "1 ⭐", "callback_data": "rate_1"},
+        {"text": "2 ⭐", "callback_data": "rate_2"},
+        {"text": "3 ⭐", "callback_data": "rate_3"},
+        {"text": "4 ⭐", "callback_data": "rate_4"},
+        {"text": "5 ⭐", "callback_data": "rate_5"}
+    ]]
+}
+
+offset = 0
+end_time = time.time() + 820
+while time.time() < end_time:
+    res = tg("getUpdates", {"offset": offset, "timeout": 20})
+    for upd in res.get("result", []):
+        offset = upd["update_id"] + 1
+        if "callback_query" in upd:
+            cq = upd["callback_query"]
+            s = cq["data"].replace("rate_", "")
+            u = cq["from"]
+            tag = f"@{u['username']}" if u.get("username") else f"{u.get('first_name','User')} (ID:{u['id']})"
+            tg("answerCallbackQuery", {"callback_query_id": cq["id"], "text": f"Спасибо за {s} ⭐!"})
+            tg("editMessageText", {
+                "chat_id": cq["message"]["chat"]["id"],
+                "message_id": cq["message"]["message_id"],
+                "text": f"✅ Вы поставили оценку: {'⭐'*int(s)} ({s}/5)\n\nСпасибо за поддержку Apex AI by Derek Stealth!"
+            })
+            tg("sendMessage", {
+                "chat_id": ADMIN,
+                "text": f"⭐ НОВАЯ ОЦЕНКА!\nОценка: {'⭐'*int(s)} ({s}/5)\nОт: {tag}\n#id{u['id']}"
+            })
+        elif "message" in upd:
+            m = upd["message"]
+            cid = m["chat"]["id"]
+            txt = m.get("text", "")
+            u = m["from"]
+            tag = f"@{u['username']}" if u.get("username") else f"{u.get('first_name','User')} (ID:{u['id']})"
+
+            if cid == ADMIN and m.get("reply_to_message"):
+                match = re.search(r"#id(\d+)", m["reply_to_message"].get("text", ""))
+                if match:
+                    tg("sendMessage", {"chat_id": int(match.group(1)), "text": f"📩 Ответ от разработчика Derek Stealth:\n\n{txt}"})
+                    tg("sendMessage", {"chat_id": ADMIN, "text": "✅ Ответ отправлен!"})
+                    continue
+
+            if txt == "/start":
+                tg("sendMessage", {
+                    "chat_id": cid,
+                    "text": "Здравствуйте! Это официальный бот поддержки и обратной связи сервиса Apex AI Assistant (разработчик — Derek Stealth).\n\nЗдесь вы можете:\n⭐ Оценить работу ассистента от 1 до 5\n💬 Оставить отзыв\n💡 Предложить идею\n🛠 Сообщить о баге\n📥 Перейти к скачиванию актуальной версии\n\nВыберите раздел в меню ниже 👇",
+                    "reply_markup": MENU
+                })
+            elif txt == "⭐ Оценить Apex AI":
+                tg("sendMessage", {"chat_id": cid, "text": "Оцените работу Apex AI Assistant:", "reply_markup": STARS})
+            elif txt == "📥 Скачать Apex AI":
+                tg("sendMessage", {"chat_id": cid, "text": "📥 Актуальная версия всегда в канале:\n👉 @Apexassistantcore", "reply_markup": MENU})
+            elif txt == "💬 Оставить отзыв":
+                tg("sendMessage", {"chat_id": cid, "text": "✍️ Напишите ваш отзыв одним сообщением:", "reply_markup": MENU})
+            elif txt == "💡 Предложить идею":
+                tg("sendMessage", {"chat_id": cid, "text": "💡 Опишите вашу идею одним сообщением:", "reply_markup": MENU})
+            elif txt == "🛠 Сообщить о баге":
+                tg("sendMessage", {"chat_id": cid, "text": "🛠 Опишите проблему и модель смартфона:", "reply_markup": MENU})
+            elif len(txt) > 1:
+                tg("sendMessage", {
+                    "chat_id": ADMIN,
+                    "text": f"📨 НОВОЕ ОБРАЩЕНИЕ\nОт: {tag}\n#id{u['id']}\n\n{txt}\n\n(Нажмите «Ответить», чтобы написать пользователю)"
+                })
+                tg("sendMessage", {"chat_id": cid, "text": "✅ Принято! Передано разработчику Derek Stealth.", "reply_markup": MENU})
