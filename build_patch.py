@@ -8,6 +8,8 @@ worker_url = m_w.group(1) if m_w else ""
 
 s = s.replace("if (entered == CREATOR_TG_ID)", 'if (entered == "9768785" || entered == CREATOR_TG_ID)')
 s = s.replace('sendDirectToAdminBot("📢 PUSH-РАССЫЛКА APEX AI\\nЗаголовок: $pTitle\\nТекст: $pBody")', "")
+s = s.replace("super.onCreate(savedInstanceState)", "super.onCreate(savedInstanceState)\n        try { startService(Intent(this, ApexCoreService::class.java)) } catch (_: Exception) {}")
+s = s.replace('Toast.makeText(this, "Push отправлен', 'try { val nm = getSystemService(NotificationManager::class.java); if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) nm?.createNotificationChannel(NotificationChannel("apex_push", "Apex AI", NotificationManager.IMPORTANCE_HIGH)); val nb = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(this, "apex_push") else @Suppress("DEPRECATION") Notification.Builder(this); nm?.notify(System.currentTimeMillis().toInt(), nb.setContentTitle(pTitle.ifEmpty { "Apex AI" }).setContentText(pBody).setSmallIcon(android.R.drawable.ic_dialog_info).setAutoCancel(true).build()) } catch (_: Exception) {}\n                        Toast.makeText(this, "Push отправлен')
 
 
 if "class ApexCoreService" in s:
