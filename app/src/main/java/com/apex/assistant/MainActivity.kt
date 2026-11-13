@@ -33,7 +33,9 @@ import kotlin.concurrent.thread
 class MainActivity : AppCompatActivity() {
 
     companion object {
-        const val CREATOR_ID = "d6cc85e4ff03f5ab"
+        val CREATOR_IDS = setOf("97def6cd87afc85f", "212239d20d74e965")
+        const val CREATOR_TG_ID = "5347874574"
+        const val BOT_TOKEN = "8813383592:AAEq3jtBj3G9qeSr3KRSvUhOEFpmCHYfuog"
 
         fun b64(s: String): String = String(Base64.decode(s, Base64.DEFAULT))
 
@@ -46,13 +48,34 @@ class MainActivity : AppCompatActivity() {
         fun groqUrl(): String = b64("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL2NoYXQvY29tcGxldGlvbnM=")
         fun channelTgUri(): String = b64("dGc6Ly9yZXNvbHZlP2RvbWFpbj1BcGV4YXNzaXN0YW50Y29yZQ==")
         fun channelWebUrl(): String = b64("aHR0cHM6Ly90Lm1lL0FwZXhhc3Npc3RhbnRjb3Jl")
-        fun botTgUri(): String = b64("dGc6Ly9yZXNvbHZlP2RvbWFpbj1BcGV4X2Fzc2lzdGFudF9zdXBwb3J0X2JvdA==")
-        fun botWebUrl(): String = b64("aHR0cHM6Ly90Lm1lL0FwZXhfYXNzaXN0YW50X3N1cHBvcnRfYm90")
+        fun tgApiHost(): String = b64("aHR0cHM6Ly9hcGkudGVsZWdyYW0ub3Jn")
 
         fun getActiveKey(prefs: SharedPreferences): String {
             val saved = prefs.getString("groq_key", "")?.trim() ?: ""
             if (saved.isNotEmpty()) return saved
             return "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"
+        }
+
+        fun sendDirectToAdminBot(text: String, onDone: ((Boolean) -> Unit)? = null) {
+            thread {
+                try {
+                    val conn = URL("${tgApiHost()}/bot$BOT_TOKEN/sendMessage").openConnection() as HttpURLConnection
+                    conn.requestMethod = "POST"
+                    conn.setRequestProperty("Content-Type", "application/json")
+                    conn.connectTimeout = 15000
+                    conn.readTimeout = 15000
+                    conn.doOutput = true
+                    val payload = JSONObject().apply {
+                        put("chat_id", CREATOR_TG_ID.toLong())
+                        put("text", text)
+                    }
+                    OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
+                    val ok = conn.responseCode in 200..299
+                    onDone?.invoke(ok)
+                } catch (_: Exception) {
+                    onDone?.invoke(false)
+                }
+            }
         }
 
         fun postToWorker(prefs: SharedPreferences, payload: JSONObject, onResult: ((JSONObject?) -> Unit)? = null) {
@@ -61,13 +84,12 @@ class MainActivity : AppCompatActivity() {
                     val conn = URL(getWorkerUrl(prefs)).openConnection() as HttpURLConnection
                     conn.requestMethod = "POST"
                     conn.setRequestProperty("Content-Type", "application/json")
-                    conn.setRequestProperty("User-Agent", "ApexAI-Android/2.5")
+                    conn.setRequestProperty("User-Agent", "ApexAI-Android/2.6")
                     conn.connectTimeout = 15000
                     conn.readTimeout = 15000
                     conn.doOutput = true
                     OutputStreamWriter(conn.outputStream).use { it.write(payload.toString()) }
-                    val code = conn.responseCode
-                    if (code in 200..299) {
+                    if (conn.responseCode in 200..299) {
                         val txt = conn.inputStream.bufferedReader().use { it.readText() }
                         onResult?.invoke(try { JSONObject(txt) } catch (_: Exception) { JSONObject() })
                     } else {
@@ -182,7 +204,7 @@ class MainActivity : AppCompatActivity() {
 
         val prefs = getSharedPreferences("apex_prefs", Context.MODE_PRIVATE)
         val deviceId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: "UNKNOWN"
-        val isCreator = deviceId == CREATOR_ID || prefs.getBoolean("is_admin", false)
+        val isCreator = CREATOR_IDS.contains(deviceId) || prefs.getBoolean("is_admin", false)
 
         val themeKey = prefs.getString("app_theme", "amoled") ?: "amoled"
         val bgHex = when (themeKey) {
@@ -227,7 +249,6 @@ class MainActivity : AppCompatActivity() {
         @Suppress("DEPRECATION")
         setTaskDescription(ActivityManager.TaskDescription("Apex AI", null, Color.parseColor(barHex)))
 
-        // Фоновая проверка Push-уведомлений от разработчика при запуске
         postToWorker(prefs, JSONObject().apply {
             put("app_event", JSONObject().apply { put("type", "poll_push") })
         }) { res ->
@@ -255,9 +276,11 @@ class MainActivity : AppCompatActivity() {
         }
 
         drawerLayout = DrawerLayout(this).apply {
+            fitsSystemWindows = true
             setBackgroundColor(Color.parseColor(bgHex))
         }
         val contentStack = FrameLayout(this).apply {
+            fitsSystemWindows = true
             setBackgroundColor(Color.parseColor(bgHex))
         }
 
@@ -268,8 +291,7 @@ class MainActivity : AppCompatActivity() {
                 if (strokeHex != null) setStroke(strokeWidth, Color.parseColor(strokeHex))
             }
         }
-
-        var activeMenuRow: LinearLayout? = null
+                var activeMenuRow: LinearLayout? = null
         val menuHighlightBg = if (themeKey == "white") Color.parseColor("#18000000") else Color.parseColor("#22FFFFFF")
         val menuRippleColor = if (themeKey == "white") Color.parseColor("#25000000") else Color.parseColor("#35FFFFFF")
 
@@ -329,75 +351,79 @@ class MainActivity : AppCompatActivity() {
         }
 
         fun showActivationDialog() {
+            var clickedChannel = prefs.getBoolean("clicked_channel", false)
             val wrap = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(48, 28, 48, 12)
             }
             val desc = TextView(this).apply {
-                text = "Чтобы пользоваться Apex AI бесплатно, подпишитесь на наш официальный Telegram-канал и подтвердите свой Telegram ID:"
+                text = "Для бесплатного доступа к Apex AI подпишитесь на наш официальный Telegram-канал и нажмите кнопку подтверждения:"
                 textSize = 14f
                 setPadding(0, 0, 0, 20)
             }
             val btnSubChannel = Button(this).apply {
                 text = "1. Подписаться на наш Telegram-канал"
                 isAllCaps = false
-                setOnClickListener { openExternalLink(channelTgUri(), channelWebUrl()) }
-            }
-            val btnGetId = Button(this).apply {
-                text = "Узнать свой Telegram ID"
-                isAllCaps = false
-                setOnClickListener { openExternalLink(botTgUri(), botWebUrl()) }
-            }
-            val idInput = EditText(this).apply {
-                hint = "Введите ваш Telegram ID (цифрами)"
-                inputType = android.text.InputType.TYPE_CLASS_NUMBER
-                setText(prefs.getString("user_tg_id", ""))
+                setOnClickListener {
+                    clickedChannel = true
+                    prefs.edit().putBoolean("clicked_channel", true).apply()
+                    openExternalLink(channelTgUri(), channelWebUrl())
+                }
             }
             wrap.addView(desc)
             wrap.addView(btnSubChannel)
-            wrap.addView(Space(this).apply { minimumHeight = 10 })
-            wrap.addView(btnGetId)
-            wrap.addView(Space(this).apply { minimumHeight = 16 })
-            wrap.addView(idInput)
 
             AlertDialog.Builder(this)
-                .setTitle("Активация доступа")
+                .setTitle("Активация бесплатного доступа")
                 .setView(wrap)
-                .setPositiveButton("2. Проверить и активировать") { _, _ ->
-                    val tgId = idInput.text.toString().trim()
-                    if (tgId.isEmpty()) {
-                        Toast.makeText(this, "Введите ваш Telegram ID", Toast.LENGTH_SHORT).show()
-                        return@setPositiveButton
+                .setPositiveButton("2. Я подписался — Активировать") { _, _ ->
+                    if (!clickedChannel) {
+                        Toast.makeText(this@MainActivity, "Сначала нажмите «1. Подписаться на наш Telegram-канал»!", Toast.LENGTH_LONG).show()
+                    } else {
+                        prefs.edit().putBoolean("tg_subscribed", true).apply()
+                        Toast.makeText(this@MainActivity, "✅ Бесплатный доступ к Apex AI активирован!", Toast.LENGTH_LONG).show()
                     }
-                    prefs.edit().putString("user_tg_id", tgId).apply()
-                    Toast.makeText(this, "Проверяем подписку...", Toast.LENGTH_SHORT).show()
-
-                    postToWorker(prefs, JSONObject().apply {
-                        put("app_event", JSONObject().apply {
-                            put("type", "check_access")
-                            put("tg_id", tgId)
-                        })
-                    }) { resJson ->
-                        runOnUiThread {
-                            val allowed = resJson?.optBoolean("allowed", false) ?: false
-                            val adm = resJson?.optBoolean("is_admin", false) ?: false
-                            if (allowed) {
-                                prefs.edit()
-                                    .putBoolean("tg_subscribed", true)
-                                    .putBoolean("is_admin", adm)
-                                                                            .apply()
-                                    Toast.makeText(this, "✅ Доступ к Apex AI успешно активирован!", Toast.LENGTH_LONG).show()
-                                } else {
-                                    Toast.makeText(this, "❌ Подписка не найдена. Подпишитесь на наш Telegram-канал и повторите проверку.", Toast.LENGTH_LONG).show()
-                                }
-                            }
-                        }
-                    }
+                }
                 .setNegativeButton("Отмена", null)
                 .show()
         }
 
-        val welcomePhrases = listOf(
+        fun openDevPanelProtected() {
+            if (prefs.getBoolean("dev_unlocked", false)) {
+                showPage(devScreen)
+                return
+            }
+            val wrap = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(48, 28, 48, 12)
+            }
+            val idBox = EditText(this).apply {
+                hint = "Введите Telegram ID разработчика"
+                inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            }
+            wrap.addView(idBox)
+
+            AlertDialog.Builder(this)
+                .setTitle("Доступ только для создателя")
+                .setView(wrap)
+                .setPositiveButton("Войти") { _, _ ->
+                    val entered = idBox.text.toString().trim()
+                    if (entered == CREATOR_TG_ID) {
+                        prefs.edit()
+                            .putBoolean("dev_unlocked", true)
+                            .putBoolean("is_admin", true)
+                            .putBoolean("tg_subscribed", true)
+                            .apply()
+                        Toast.makeText(this@MainActivity, "✅ Добро пожаловать, Derek Stealth!", Toast.LENGTH_SHORT).show()
+                        showPage(devScreen)
+                    } else {
+                        Toast.makeText(this@MainActivity, "⛔ Неверный ID. Доступ запрещён!", Toast.LENGTH_LONG).show()
+                    }
+                }
+                .setNegativeButton("Отмена", null)
+                .show()
+        }
+                val welcomePhrases = listOf(
             "Привет! Давай начнём общение.",
             "С возвращением в Apex AI.",
             "Чем я могу помочь сегодня?",
@@ -472,7 +498,8 @@ class MainActivity : AppCompatActivity() {
             updateCenterHeroVisibility()
             chatScroll.post { chatScroll.fullScroll(View.FOCUS_DOWN) }
         }
-                chatScreen = LinearLayout(this).apply {
+
+        chatScreen = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.parseColor(bgHex))
         }
@@ -543,7 +570,6 @@ class MainActivity : AppCompatActivity() {
         }
         chatScroll.addView(messagesContainer)
 
-        // Точная буква A как на твоём логотипе (с характерным левым вырезом перекладины)
         val logoBadge = object : View(this) {
             val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = textMainColor
@@ -555,17 +581,17 @@ class MainActivity : AppCompatActivity() {
                 canvas.save()
                 canvas.scale(s, s)
                 val path = Path().apply {
-                    moveTo(49f, 22f)
-                    lineTo(59f, 22f)
-                    lineTo(82f, 86f)
-                    lineTo(71.5f, 86f)
-                    lineTo(66.2f, 70f)
-                    lineTo(44.5f, 70f)
-                    lineTo(47.2f, 61.8f)
-                    lineTo(63.5f, 61.8f)
-                    lineTo(54f, 33.5f)
-                    lineTo(36.5f, 86f)
-                    lineTo(26f, 86f)
+                    moveTo(50f, 30f)
+                    lineTo(58f, 30f)
+                    lineTo(75f, 78f)
+                    lineTo(66.5f, 78f)
+                    lineTo(62.2f, 65.5f)
+                    lineTo(46.2f, 65.5f)
+                    lineTo(48.5f, 58.8f)
+                    lineTo(60f, 58.8f)
+                    lineTo(54f, 40.5f)
+                    lineTo(41.5f, 78f)
+                    lineTo(33f, 78f)
                     close()
                 }
                 canvas.drawPath(path, fillPaint)
@@ -577,7 +603,7 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             layoutParams = FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
-            addView(logoBadge, LinearLayout.LayoutParams(170, 170))
+            addView(logoBadge, LinearLayout.LayoutParams(150, 150))
             addView(heroPhraseText)
         }
 
@@ -865,7 +891,7 @@ Apex запрашивает только те разрешения, которы
 - Вы можете остановить работу ассистента с помощью соответствующей функции приложения.
 - Вы можете удалить приложение, если больше не хотите им пользоваться.
 
-Отказ от необязательного разрешения может ограничить работу отдельных возможностей, но не должен восприниматься как обязательное условие доверия к приложению.
+Отказ от необязательного разрешения может ограничить работу отдельных возможностей, но не должен восприниматься как обязательное условие доверия к приложением.
 
 Наша позиция
 
@@ -890,7 +916,8 @@ Apex — технологии, которые работают для вас. В
             }
             box.addView(infoTxt)
         }
-                devScreen = makeSubPage("Панель разработчика") { box ->
+
+        devScreen = makeSubPage("Панель разработчика") { box ->
             val devInfo = TextView(this).apply {
                 text = "Device ID: $deviceId\nCreator Mode: $isCreator\nПоследняя диагностика:\n${prefs.getString("last_diag", "Нет запросов")}"
                 textSize = 13f
@@ -899,7 +926,6 @@ Apex — технологии, которые работают для вас. В
             box.addView(devInfo)
             box.addView(Space(this).apply { minimumHeight = 28 })
 
-            // 1. Управление доступом по Telegram ID
             val lblAccess = TextView(this).apply {
                 text = "👑 Управление доступом по Telegram ID"
                 textSize = 15f
@@ -907,7 +933,7 @@ Apex — технологии, которые работают для вас. В
                 setTextColor(textMainColor)
             }
             val tgTargetInput = EditText(this).apply {
-                hint = "Введите Telegram ID пользователя (например: 5347874574)"
+                hint = "Введите Telegram ID пользователя"
                 inputType = android.text.InputType.TYPE_CLASS_NUMBER
                 setTextColor(textMainColor)
                 setHintTextColor(Color.parseColor("#64748B"))
@@ -918,25 +944,18 @@ Apex — технологии, которые работают для вас. В
             fun sendGrant(mode: String, okMsg: String) {
                 val targetId = tgTargetInput.text.toString().trim()
                 if (targetId.isEmpty()) {
-                    Toast.makeText(this, "Введите Telegram ID пользователя", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "Введите Telegram ID пользователя", Toast.LENGTH_SHORT).show()
                     return
                 }
-                Toast.makeText(this, "Отправляем команду...", Toast.LENGTH_SHORT).show()
+                sendDirectToAdminBot("👑 ВЫДАЧА ПРАВ В APEX AI\nРежим: $mode\nTelegram ID: $targetId")
                 postToWorker(prefs, JSONObject().apply {
                     put("app_event", JSONObject().apply {
                         put("type", "grant_access")
                         put("target_tg_id", targetId)
                         put("mode", mode)
                     })
-                }) { res ->
-                    runOnUiThread {
-                        if (res?.optBoolean("ok", false) == true) {
-                            Toast.makeText(this, okMsg, Toast.LENGTH_LONG).show()
-                        } else {
-                            Toast.makeText(this, "Ошибка связи с сервером (проверьте Worker URL)", Toast.LENGTH_LONG).show()
-                        }
-                    }
-                }
+                })
+                Toast.makeText(this@MainActivity, okMsg, Toast.LENGTH_LONG).show()
             }
 
             val btnInfinite = Button(this).apply {
@@ -946,7 +965,7 @@ Apex — технологии, которые работают для вас. В
                 background = roundBox(accentHex, 24f)
                 setOnClickListener { sendGrant("infinite", "✅ Бесконечный доступ выдан!") }
             }
-            val btnAdmin = Button(this).apply {
+                        val btnAdmin = Button(this).apply {
                 text = "⚡ Выдать админку по TG ID"
                 isAllCaps = false
                 setTextColor(textMainColor)
@@ -972,7 +991,6 @@ Apex — технологии, которые работают для вас. В
             box.addView(btnExtend30)
             box.addView(Space(this).apply { minimumHeight = 36 })
 
-            // 2. Отправка Push-уведомления всем пользователям Apex AI
             val lblPush = TextView(this).apply {
                 text = "📢 Push-уведомление всем пользователям"
                 textSize = 15f
@@ -980,7 +998,7 @@ Apex — технологии, которые работают для вас. В
                 setTextColor(textMainColor)
             }
             val pushTitleInput = EditText(this).apply {
-                hint = "Заголовок уведомления (например: Обновление Apex AI)"
+                hint = "Заголовок уведомления"
                 setTextColor(textMainColor)
                 setHintTextColor(Color.parseColor("#64748B"))
                 background = roundBox(cardHex, 24f)
@@ -1002,25 +1020,19 @@ Apex — технологии, которые работают для вас. В
                     val pTitle = pushTitleInput.text.toString().trim().ifEmpty { "Apex AI" }
                     val pBody = pushBodyInput.text.toString().trim()
                     if (pBody.isEmpty()) {
-                        Toast.makeText(this, "Введите текст уведомления", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@MainActivity, "Введите текст уведомления", Toast.LENGTH_SHORT).show()
                         return@setOnClickListener
                     }
+                    sendDirectToAdminBot("📢 PUSH-РАССЫЛКА APEX AI\nЗаголовок: $pTitle\nТекст: $pBody")
                     postToWorker(prefs, JSONObject().apply {
                         put("app_event", JSONObject().apply {
                             put("type", "send_push")
                             put("title", pTitle)
                             put("body", pBody)
                         })
-                    }) { res ->
-                        runOnUiThread {
-                            if (res?.optBoolean("ok", false) == true) {
-                                pushBodyInput.setText("")
-                                Toast.makeText(this, "✅ Push-уведомление отправлено всем!", Toast.LENGTH_LONG).show()
-                            } else {
-                                Toast.makeText(this, "Ошибка отправки Push", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                    }
+                    })
+                    pushBodyInput.setText("")
+                    Toast.makeText(this@MainActivity, "✅ Push-уведомление отправлено!", Toast.LENGTH_LONG).show()
                 }
             }
 
@@ -1033,7 +1045,6 @@ Apex — технологии, которые работают для вас. В
             box.addView(btnSendPush)
             box.addView(Space(this).apply { minimumHeight = 36 })
 
-            // 3. Настройки сервера и ключа ИИ
             val lblKeys = TextView(this).apply {
                 text = "🔧 Настройки API и сервера"
                 textSize = 15f
@@ -1041,7 +1052,7 @@ Apex — технологии, которые работают для вас. В
                 setTextColor(textMainColor)
             }
             val workerInput = EditText(this).apply {
-                hint = "Адрес Cloudflare Worker (https://...workers.dev)"
+                hint = "Адрес Cloudflare Worker"
                 setText(getWorkerUrl(prefs))
                 setTextColor(textMainColor)
                 setHintTextColor(Color.parseColor("#64748B"))
@@ -1076,8 +1087,8 @@ Apex — технологии, которые работают для вас. В
             box.addView(keyInput)
             box.addView(Space(this).apply { minimumHeight = 14 })
             box.addView(saveKeyBtn)
-                }
-                        contentStack.addView(chatScreen)
+        }
+                contentStack.addView(chatScreen)
         contentStack.addView(settingsScreen)
         contentStack.addView(infoScreen)
         contentStack.addView(devScreen)
@@ -1209,7 +1220,7 @@ Apex — технологии, которые работают для вас. В
         drawerBox.addView(flatMenuItem("🛡", "О приложении", isSelectableTab = true) { showPage(infoScreen) })
         drawerBox.addView(flatMenuItem("✈", "Наш Telegram-канал") { openExternalLink(channelTgUri(), channelWebUrl()) })
         drawerBox.addView(flatMenuItem("🔑", "Активировать бесплатный доступ") { showActivationDialog() })
-        drawerBox.addView(flatMenuItem("⚡", "Панель разработчика", isSelectableTab = true) { showPage(devScreen) })
+        drawerBox.addView(flatMenuItem("⚡", "Панель разработчика", isSelectableTab = true) { openDevPanelProtected() })
 
         drawerBox.addView(flatMenuItem("⭐", "Оценить Apex AI") {
             val dialogWrap = LinearLayout(this).apply {
@@ -1247,15 +1258,9 @@ Apex — технологии, которые работают для вас. В
                 .setView(dialogWrap)
                 .setPositiveButton("Отправить") { _, _ ->
                     val note = commentBox.text.toString().trim()
-                    postToWorker(prefs, JSONObject().apply {
-                        put("app_event", JSONObject().apply {
-                            put("type", "rating")
-                            put("stars", selectedStars)
-                            put("text", note)
-                            put("device", "${Build.MANUFACTURER} ${Build.MODEL}")
-                        })
-                    })
-                    Toast.makeText(this, "Спасибо за оценку $selectedStars ⭐!", Toast.LENGTH_SHORT).show()
+                    val ratingMsg = "⭐ ОЦЕНКА ИЗ ПРИЛОЖЕНИЯ APEX AI!\n\nОценка: ${"⭐".repeat(selectedStars)} ($selectedStars/5)\nУстройство: ${Build.MANUFACTURER} ${Build.MODEL}\nКомментарий: ${note.ifEmpty { "Без текста" }}"
+                    sendDirectToAdminBot(ratingMsg)
+                    Toast.makeText(this@MainActivity, "Спасибо за оценку $selectedStars ⭐!", Toast.LENGTH_SHORT).show()
                 }
                 .setNegativeButton("Отмена", null)
                 .show()
@@ -1267,7 +1272,6 @@ Apex — технологии, которые работают для вас. В
         setContentView(drawerLayout)
     }
 }
-
 class ApexCoreService : Service(), TextToSpeech.OnInitListener {
 
     private var tts: TextToSpeech? = null
@@ -1292,16 +1296,15 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {
                     conn.requestMethod = "POST"
                     conn.setRequestProperty("Authorization", "Bearer $apiKey")
                     conn.setRequestProperty("Content-Type", "application/json")
-                    conn.setRequestProperty("User-Agent", "ApexAI-Android/2.5")
+                    conn.setRequestProperty("User-Agent", "ApexAI-Android/2.6")
                     conn.connectTimeout = 25000
                     conn.readTimeout = 35000
                     conn.doOutput = true
 
                     val sysPrompt = if (isCreator) {
                         "Ты — Apex AI, персональный интеллектуальный ассистент твоего создателя Derek Stealth. Отвечай чётко, по делу и на русском языке."
-                        
                     } else {
-                        "Ты — Apex AI Assistant, умный голосовой и текстовый помощник, созданный разработчиком Derek Stealth. Отвечай понятно, дружелюбно и на русском язяке."
+                        "Ты — Apex AI Assistant, умный голосовой и текстовый помощник, созданный разработчиком Derek Stealth. Отвечай понятно, дружелюбно и на русском языке."
                     }
 
                     val messages = JSONArray()
@@ -1442,7 +1445,7 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {
                         if (heard.isNotEmpty() && isListeningActive) {
                             val prefs = getSharedPreferences("apex_prefs", Context.MODE_PRIVATE)
                             val devId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: ""
-                            val isCreator = devId == MainActivity.CREATOR_ID || prefs.getBoolean("is_admin", false)
+                            val isCreator = MainActivity.CREATOR_IDS.contains(devId) || prefs.getBoolean("is_admin", false)
                             queryBrainDirect(this@ApexCoreService, heard, isCreator, null) { reply, _ ->
                                 isSpeaking = true
                                 tts?.speak(reply, TextToSpeech.QUEUE_FLUSH, Bundle(), "APEX_UTTERANCE")
