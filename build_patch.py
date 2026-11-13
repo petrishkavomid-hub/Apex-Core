@@ -64,18 +64,18 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
                         }}
                     }}
                     if (needVision) {{
-                        val v = ids.firstOrNull {{ it.contains("maverick", true) || it.contains("scout", true) || it.contains("vision", true) || it.contains("llama-4", true) }}
+                        val v = ids.firstOrNull {{ it.contains("vision", true) || it.contains("llava", true) || it.contains("scout", true) || it.contains("maverick", true) }}
                         if (v != null) {{ cachedVisionModel = v; return v }}
                     }} else {{
                         for (tag in listOf("llama-3.3-70b", "70b", "qwen", "32b", "8b", "gemma")) {{
-                            val hit = ids.firstOrNull {{ it.contains(tag, true) && !it.contains("scout", true) && !it.contains("maverick", true) }}
+                            val hit = ids.firstOrNull {{ it.contains(tag, true) && !it.contains("vision", true) }}
                             if (hit != null) {{ cachedTextModel = hit; return hit }}
                         }}
                         if (ids.isNotEmpty()) {{ cachedTextModel = ids.first(); return ids.first() }}
                     }}
                 }}
             }} catch (_: Exception) {{}}
-            return if (needVision) "meta-llama/llama-4-maverick-17b-128e-instruct" else "llama-3.3-70b-versatile"
+            return if (needVision) "llama-3.2-11b-vision-preview" else "llama-3.3-70b-versatile"
         }}
 
         private fun runDeviceCmd(ctx: Context, raw: String): String? {{
@@ -98,17 +98,17 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
                     val id = cm.cameraIdList.firstOrNull() ?: return null
                     val on = !(q.contains("выкл") || q.contains("откл") || q.contains("погаси"))
                     cm.setTorchMode(id, on)
-                    return if (on) "Фонарик включён, сэр." else "Фонарик выключен, сэр."
+                    return if (on) "Фонарик включён." else "Фонарик выключен."
                 }}
                 if (q == "назад" || q == "вернись") {{
                     ApexAccessibilityService.instance?.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
-                    return "Возвращаюсь назад, сэр."
+                    return "Возвращаюсь назад."
                 }}
                 if (q == "домой" || q == "на рабочий стол" || q == "сверни всё" || q == "закрой всё") {{
                     val acc = ApexAccessibilityService.instance
                     if (acc != null) acc.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME)
                     else ctx.startActivity(Intent(Intent.ACTION_MAIN).apply {{ addCategory(Intent.CATEGORY_HOME); flags = Intent.FLAG_ACTIVITY_NEW_TASK }})
-                    return "Сворачиваю на рабочий стол, сэр."
+                    return "Сворачиваю на рабочий стол."
                 }}
                 if (q.startsWith("закрой ") || q.startsWith("выключи ") || q.startsWith("убери ") || q.startsWith("сверни ")) {{
                     val target = q.removePrefix("закрой ").removePrefix("выключи ").removePrefix("убери ").removePrefix("сверни ").trim()
@@ -125,7 +125,7 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
                     val acc = ApexAccessibilityService.instance
                     if (acc != null) acc.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME)
                     else ctx.startActivity(Intent(Intent.ACTION_MAIN).apply {{ addCategory(Intent.CATEGORY_HOME); flags = Intent.FLAG_ACTIVITY_NEW_TASK }})
-                    return "Закрываю $target, сэр."
+                    return "Закрываю $target."
                 }}
                 if (q.startsWith("открой ") || q.startsWith("запусти ") || q.startsWith("включи ")) {{
                     val t = q.removePrefix("открой ").removePrefix("запусти ").removePrefix("включи ").trim()
@@ -135,19 +135,19 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
                         val lbl = pm.getApplicationLabel(app).toString().lowercase(Locale.getDefault())
                         val pkg = app.packageName.lowercase(Locale.getDefault())
                         if ((lbl.contains(t) || lbl.contains(w) || pkg.contains(w)) && w.length >= 2) {{
-                            pm.getLaunchIntentForPackage(app.packageName)?.let {{ it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); ctx.startActivity(it); return "Запускаю ${{pm.getApplicationLabel(app)}}, сэр." }}
+                            pm.getLaunchIntentForPackage(app.packageName)?.let {{ it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); ctx.startActivity(it); return "Запускаю ${{pm.getApplicationLabel(app)}}." }}
                         }}
                     }}
-                    if (t.contains("камер")) {{ ctx.startActivity(Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); return "Активирую камеру, сэр." }}
+                    if (t.contains("камер")) {{ ctx.startActivity(Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); return "Открываю камеру." }}
                 }}
                 if (q.startsWith("позвони ") || q.startsWith("набери ")) {{
                     val num = q.replace(Regex("[^0-9+]"), "")
-                    if (num.length >= 3) {{ ctx.startActivity(Intent(Intent.ACTION_CALL, Uri.parse("tel:$num")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); return "Набираю номер $num, сэр." }}
+                    if (num.length >= 3) {{ ctx.startActivity(Intent(Intent.ACTION_CALL, Uri.parse("tel:$num")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); return "Набираю $num." }}
                 }}
                 if (q.startsWith("найди ")) {{
                     val sq = q.removePrefix("найди ").trim()
                     ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("{g_search}" + Uri.encode(sq))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                    return "Ищу информацию по запросу: $sq"
+                    return "Ищу: $sq"
                 }}
             }} catch (_: Exception) {{}}
             return null
@@ -174,7 +174,7 @@ service_part2 = rf'''
                     conn.readTimeout = 30000
                     conn.doOutput = true
 
-                    val sysPrompt = "Ты — Apex AI, высокоинтеллектуальный голосовой и текстовый ассистент в стиле Джарвиса из Железного человека, созданный инженером Derek Stealth. Обращайся к пользователю «сэр» или по-дружески уверенно, спокойно и с лёгкой харизмой. Подстраивай объём ответа под ситуацию: на короткие фразы и приветствия отвечай лаконично в 1-2 предложения, а сложные задачи разбирай глубоко и чётко. Никогда не используй символы разметки вроде звёздочек, решёток или тире в списках, пиши чистым естественным текстом."
+                    val sysPrompt = "Ты — Apex AI, умный голосовой и текстовый ассистент от Derek Stealth. Общайся спокойно, уверенно и по-человечески, без слова «сэр» и без нравоучений. На короткие фразы отвечай кратко (1-2 предложения), на сложные задачи — подробно и по шагам. Не используй звёздочки, решётки и символы разметки."
                     val messages = JSONArray()
                     messages.put(JSONObject().apply {{ put("role", "system"); put("content", sysPrompt) }})
 
@@ -212,20 +212,11 @@ service_part2 = rf'''
         }}
     }}
 
-    private var lastHandledPhrase = ""
-    private val partialRunnable = Runnable {{
-        val pending = pendingPartialText
-        if (pending.isNotEmpty()) {{
-            handleWakeAndCommand(pending)
-        }}
-    }}
-    private var pendingPartialText = ""
-
     private fun speakClean(text: String) {{
         val cleaned = cleanSpeechText(text)
         if (cleaned.isEmpty()) {{
             isSpeaking = false
-            if (isListeningActive) mainHandler.postDelayed({{ startListeningCycle() }}, 200)
+            if (isListeningActive) startListeningCycle()
             return
         }}
         isSpeaking = true
@@ -244,7 +235,7 @@ service_part2 = rf'''
 service_part3 = rf'''
     private fun startPushPolling() {{
         thread {{
-            while (isListeningActive) {{
+            while (true) {{
                 try {{
                     val prefs = getSharedPreferences("apex_prefs", Context.MODE_PRIVATE)
                     val devId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: ""
@@ -278,7 +269,7 @@ service_part3 = rf'''
                         }}
                     }}
                 }} catch (_: Exception) {{}}
-                Thread.sleep(12000)
+                Thread.sleep(10000)
             }}
         }}
     }}
@@ -289,6 +280,7 @@ service_part3 = rf'''
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {{
             getSystemService(NotificationManager::class.java)?.createNotificationChannel(NotificationChannel("apex_voice", "Apex Voice", NotificationManager.IMPORTANCE_LOW))
         }}
+        startPushPolling()
     }}
 
     override fun onInit(status: Int) {{
@@ -296,8 +288,8 @@ service_part3 = rf'''
             tts?.setLanguage(Locale("ru", "RU"))
             tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {{
                 override fun onStart(id: String?) {{ isSpeaking = true }}
-                override fun onDone(id: String?) {{ isSpeaking = false; if (isListeningActive) mainHandler.postDelayed({{ startListeningCycle() }}, 200) }}
-                override fun onError(id: String?) {{ isSpeaking = false; if (isListeningActive) mainHandler.postDelayed({{ startListeningCycle() }}, 200) }}
+                override fun onDone(id: String?) {{ isSpeaking = false; if (isListeningActive) startListeningCycle() }}
+                override fun onError(id: String?) {{ isSpeaking = false; if (isListeningActive) startListeningCycle() }}
             }})
         }}
     }}
@@ -308,7 +300,6 @@ service_part3 = rf'''
                 val nb = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(this, "apex_voice") else @Suppress("DEPRECATION") Notification.Builder(this)
                 startForeground(1, nb.setContentTitle("Apex AI").setContentText("Активен • Скажите «Апекс»").setSmallIcon(android.R.drawable.ic_btn_speak_now).build())
                 isListeningActive = true
-                startPushPolling()
                 startListeningCycle()
             }}
             "STOP_VOICE" -> {{
@@ -322,35 +313,10 @@ service_part3 = rf'''
         return START_STICKY
     }}
 
-    private fun handleWakeAndCommand(rawText: String) {{
-        val clean = rawText.trim()
-        if (clean.isEmpty() || clean == lastHandledPhrase) return
-        val low = clean.lowercase(Locale.getDefault())
-        val wake = listOf("апекс", "apex", "апек", "апикс", "эпекс", "алекс").firstOrNull {{ low.contains(it) }} ?: return
-        val cmd = clean.substring(low.indexOf(wake) + wake.length).trim(',', '.', ' ', '!', '?')
-        lastHandledPhrase = clean
-        pendingPartialText = ""
-        mainHandler.removeCallbacks(partialRunnable)
-        try {{ speechRecognizer?.stopListening() }} catch (_: Exception) {{}}
-        if (cmd.isEmpty()) {{
-            speakClean("Слушаю вас, сэр")
-            return
-        }}
-        val prefs = getSharedPreferences("apex_prefs", Context.MODE_PRIVATE)
-        val devId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: ""
-        val isCreator = MainActivity.CREATOR_IDS.contains(devId) || prefs.getBoolean("is_admin", false)
-        queryBrainDirect(this@ApexCoreService, cmd, isCreator, null) {{ reply, _ ->
-            speakClean(reply)
-        }}
-    }}
-
     private fun startListeningCycle() {{
         if (!isListeningActive || isSpeaking) return
         mainHandler.post {{
             try {{
-                lastHandledPhrase = ""
-                pendingPartialText = ""
-                mainHandler.removeCallbacks(partialRunnable)
                 try {{ (getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager).adjustStreamVolume(android.media.AudioManager.STREAM_NOTIFICATION, android.media.AudioManager.ADJUST_MUTE, 0) }} catch (_: Exception) {{}}
                 speechRecognizer?.destroy()
                 speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
@@ -360,39 +326,36 @@ service_part3 = rf'''
                     override fun onRmsChanged(r: Float) {{}}
                     override fun onBufferReceived(b: ByteArray?) {{}}
                     override fun onEndOfSpeech() {{}}
+                    override fun onPartialResults(p: Bundle?) {{}}
                     override fun onEvent(e: Int, p: Bundle?) {{}}
-                    override fun onError(e: Int) {{ if (isListeningActive && !isSpeaking) mainHandler.postDelayed({{ startListeningCycle() }}, 200L) }}
-                    override fun onPartialResults(p: Bundle?) {{
-                        val part = p?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull() ?: ""
-                        val low = part.lowercase(Locale.getDefault())
-                        if (listOf("апекс", "apex", "апек", "апикс", "эпекс", "алекс").any {{ low.contains(it) }}) {{
-                            pendingPartialText = part
-                            mainHandler.removeCallbacks(partialRunnable)
-                            mainHandler.postDelayed(partialRunnable, 750L)
-                        }}
-                    }}
+                    override fun onError(e: Int) {{ if (isListeningActive && !isSpeaking) mainHandler.postDelayed({{ startListeningCycle() }}, 150L) }}
                     override fun onResults(results: Bundle?) {{
-                        mainHandler.removeCallbacks(partialRunnable)
-                        val heard = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull() ?: ""
-                        if (heard.isNotEmpty() && lastHandledPhrase.isEmpty()) {{
-                            val low = heard.lowercase(Locale.getDefault())
-                            if (listOf("апекс", "apex", "апек", "апикс", "эпекс", "алекс").any {{ low.contains(it) }}) {{
-                                handleWakeAndCommand(heard)
-                                return
-                            }}
+                        val heard = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim() ?: ""
+                        val low = heard.lowercase(Locale.getDefault())
+                        val wake = listOf("апекс", "apex", "апек", "апикс", "эпекс", "алекс").firstOrNull {{ low.contains(it) }}
+                        if (wake == null) {{
+                            if (isListeningActive && !isSpeaking) startListeningCycle()
+                            return
                         }}
-                        if (isListeningActive && !isSpeaking) mainHandler.postDelayed({{ startListeningCycle() }}, 150L)
+                        val cmd = heard.substring(low.indexOf(wake) + wake.length).trim(',', '.', ' ', '!', '?')
+                        if (cmd.isEmpty()) {{
+                            speakClean("Слушаю")
+                            return
+                        }}
+                        val prefs = getSharedPreferences("apex_prefs", Context.MODE_PRIVATE)
+                        val devId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: ""
+                        val isCreator = MainActivity.CREATOR_IDS.contains(devId) || prefs.getBoolean("is_admin", false)
+                        queryBrainDirect(this@ApexCoreService, cmd, isCreator, null) {{ reply, _ ->
+                            speakClean(reply)
+                        }}
                     }}
                 }})
                 val ri = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {{
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
-                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 700L)
-                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 600L)
                 }}
                 speechRecognizer?.startListening(ri)
-            }} catch (_: Exception) {{ if (isListeningActive) mainHandler.postDelayed({{ startListeningCycle() }}, 400L) }}
+            }} catch (_: Exception) {{ if (isListeningActive) mainHandler.postDelayed({{ startListeningCycle() }}, 300L) }}
         }}
     }}
 
@@ -402,6 +365,7 @@ service_part3 = rf'''
 '''
 
 open(p, "w").write(s + service_part1 + service_part2 + service_part3)
+
 ns = base64.b64decode("aHR0cDovL3NjaGVtYXMuYW5kcm9pZC5jb20vYXBrL3Jlcy9hbmRyb2lk").decode()
 perms = [
     "RECORD_AUDIO", "INTERNET", "CAMERA", "CALL_PHONE", "SYSTEM_ALERT_WINDOW",
@@ -433,8 +397,11 @@ open("app/src/main/AndroidManifest.xml", "w").write(m_xml)
 
 os.makedirs("app/src/main/res/drawable", exist_ok=True)
 os.makedirs("app/src/main/res/mipmap-anydpi-v26", exist_ok=True)
-open("app/src/main/res/drawable/ic_apex_fg.xml", "w").write(f'<?xml version="1.0" encoding="utf-8"?><vector xmlns:android="{ns}" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108"><path android:fillColor="#000000" android:pathData="M49.5,32 L58.5,32 L73,75 L65.2,75 L61.8,64.5 L47.2,64.5 L49.2,58.2 L59.8,58.2 L54,40 L42.8,75 L35,75 Z" /></vector>')
-open("app/src/main/res/drawable/ic_apex_bg.xml", "w").write(f'<?xml version="1.0" encoding="utf-8"?><vector xmlns:android="{ns}" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108"><path android:fillColor="#FFFFFF" android:pathData="M0,0h108v108h-108z" /></vector>')
-ad = f'<?xml version="1.0" encoding="utf-8"?><adaptive-icon xmlns:android="{ns}"><background android:drawable="@drawable/ic_apex_bg" /><foreground android:drawable="@drawable/ic_apex_fg" /></adaptive-icon>'
-open("app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml", "w").write(ad)
-open("app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml", "w").write(ad)
+fg_b64 = "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPHZlY3RvciB4bWxuczphbmRyb2lkPSJodHRwOi8vc2NoZW1hcy5hbmRyb2lkLmNvbS9hcGsvcmVzL2FuZHJvaWQiIGFuZHJvaWQ6d2lkdGg9IjEwOGRwIiBhbmRyb2lkOmhlaWdodD0iMTA4ZHAiIGFuZHJvaWQ6dmlld3BvcnRXaWR0aD0iMTA4IiBhbmRyb2lkOnZpZXdwb3J0SGVpZ2h0PSIxMDgiPjxwYXRoIGFuZHJvaWQ6ZmlsbENvbG9yPSIjMDAwMDAwIiBhbmRyb2lkOnBhdGhEYXRhPSJNNDkuNSwzMiBMNTguNSwzMiBMNzMsNzUgTDY1LjIsNzUgTDYxLjgsNjQuNSBMNDcuMiw2NC41IEw0OS4yLDU4LjIgTDU5LjgsNTguMiBMNTQsNDAgTDQyLjgsNzUgTDM1LDc1IFoiIC8+PC92ZWN0b3I+"
+bg_b64 = "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPHZlY3RvciB4bWxuczphbmRyb2lkPSJodHRwOi8vc2NoZW1hcy5hbmRyb2lkLmNvbS9hcGsvcmVzL2FuZHJvaWQiIGFuZHJvaWQ6d2lkdGg9IjEwOGRwIiBhbmRyb2lkOmhlaWdodD0iMTA4ZHAiIGFuZHJvaWQ6dmlld3BvcnRXaWR0aD0iMTA4IiBhbmRyb2lkOnZpZXdwb3J0SGVpZ2h0PSIxMDgiPjxwYXRoIGFuZHJvaWQ6ZmlsbENvbG9yPSIjRkZGRkZGIiBhbmRyb2lkOnBhdGhEYXRhPSJNMCwwaDEwOHYxMDhoLTEwOHoiIC8+PC92ZWN0b3I+"
+ad_b64 = "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPGFkYXB0aXZlLWljb24geG1sbnM6YW5kcm9pZD0iaHR0cDovL3NjaGVtYXMuYW5kcm9pZC5jb20vYXBrL3Jlcy9hbmRyb2lkIj48YmFja2dyb3VuZCBhbmRyb2lkOmRyYXdhYmxlPSJAZHJhd2FibGUvaWNfYXBleF9iZyIgLz48Zm9yZWdyb3VuZCBhbmRyb2lkOmRyYXdhYmxlPSJAZHJhd2FibGUvaWNfYXBleF9mZyIgLz48L2FkYXB0aXZlLWljb24+"
+
+open("app/src/main/res/drawable/ic_apex_fg.xml", "wb").write(base64.b64decode(fg_b64))
+open("app/src/main/res/drawable/ic_apex_bg.xml", "wb").write(base64.b64decode(bg_b64))
+open("app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml", "wb").write(base64.b64decode(ad_b64))
+open("app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml", "wb").write(base64.b64decode(ad_b64))
