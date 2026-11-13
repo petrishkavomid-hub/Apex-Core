@@ -8,10 +8,8 @@ worker_url = m_w.group(1) if m_w else ""
 
 s = s.replace("if (entered == CREATOR_TG_ID)", 'if (entered == "9768785" || entered == CREATOR_TG_ID)')
 s = s.replace('sendDirectToAdminBot("📢 PUSH-РАССЫЛКА APEX AI\\nЗаголовок: $pTitle\\nТекст: $pBody")', "")
-s = s.replace("super.onCreate(savedInstanceState)", "super.onCreate(savedInstanceState)\n        try { startService(Intent(this, ApexCoreService::class.java)) } catch (_: Exception) {}")
-s = s.replace('Toast.makeText(this, "Push отправлен', 'try { val nm = getSystemService(NotificationManager::class.java); if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) nm?.createNotificationChannel(NotificationChannel("apex_push", "Apex AI", NotificationManager.IMPORTANCE_HIGH)); val nb = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(this, "apex_push") else @Suppress("DEPRECATION") Notification.Builder(this); nm?.notify(System.currentTimeMillis().toInt(), nb.setContentTitle(pTitle.ifEmpty { "Apex AI" }).setContentText(pBody).setSmallIcon(android.R.drawable.ic_dialog_info).setAutoCancel(true).build()) } catch (_: Exception) {}\n                        Toast.makeText(this, "Push отправлен')
-
-
+s = s.replace("super.onCreate(savedInstanceState)", "super.onCreate(savedInstanceState)\n        try { if (Build.VERSION.SDK_INT >= 33) requestPermissions(arrayOf(\"android.permission.POST_NOTIFICATIONS\", \"android.permission.RECORD_AUDIO\"), 101) } catch (_: Exception) {}\n        try { startService(Intent(this, ApexCoreService::class.java)) } catch (_: Exception) {}")
+s = s.replace('Toast.makeText(this, "Push отправлен', 'try { val nm = getSystemService(NotificationManager::class.java); if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) nm?.createNotificationChannel(NotificationChannel("apex_push", "Apex AI", NotificationManager.IMPORTANCE_HIGH)); val nb = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(this, "apex_push") else @Suppress("DEPRECATION") Notification.Builder(this); nm?.notify(System.currentTimeMillis().toInt(), nb.setContentTitle("Apex AI").setContentText("Новое объявление от администратора").setSmallIcon(android.R.drawable.ic_dialog_info).setAutoCancel(true).build()) } catch (_: Exception) {}\n                        Toast.makeText(this, "Push отправлен')
 if "class ApexCoreService" in s:
     s = s[:s.find("class ApexCoreService")]
 
@@ -439,3 +437,13 @@ open("app/src/main/res/drawable/ic_apex_fg.xml", "wb").write(base64.b64decode(fg
 open("app/src/main/res/drawable/ic_apex_bg.xml", "wb").write(base64.b64decode(bg_b64))
 open("app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml", "wb").write(base64.b64decode(ad_b64))
 open("app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml", "wb").write(base64.b64decode(ad_b64))
+import subprocess
+if not os.path.exists("app/apex.jks"):
+    subprocess.run(["keytool", "-genkey", "-v", "-keystore", "app/apex.jks", "-keyalg", "RSA", "-keysize", "2048", "-validity", "10000", "-alias", "apex", "-storepass", "apex1234", "-keypass", "apex1234", "-dname", "CN=ApexAI,O=DerekStealth,C=RU"], check=False)
+g_file = "app/build.gradle" if os.path.exists("app/build.gradle") else "app/build.gradle.kts"
+if os.path.exists(g_file) and os.path.exists("app/apex.jks"):
+    g_txt = open(g_file).read()
+    if "apex.jks" not in g_txt and "android {" in g_txt:
+        sign_cfg = 'android {\n    signingConfigs { debug { storeFile file("apex.jks"); storePassword "apex1234"; keyAlias "apex"; keyPassword "apex1234" } }\n'
+        open(g_file, "w").write(g_txt.replace("android {", sign_cfg, 1))
+        
