@@ -13,7 +13,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Fix AI, Personality, Sub Check and Manifest
+      - name: Fix AI Response, Activation Dialog and Manifest
         run: |
           cat << 'EOF' | python3
           import re, base64
@@ -26,59 +26,25 @@ jobs:
           s = re.sub(r"fun groqUrl\(\): String = .*", f'fun groqUrl(): String = "{u}"', s)
           s = s.replace('put("max_tokens", 1024)', 'put("max_tokens", 4096)')
 
+          # Убираем сломанный resolveGroqModel и ставим рабочие модели напрямую
+          s = re.sub(r"private fun resolveGroqModel[\s\S]*?fun queryBrainDirect\(", "fun queryBrainDirect(", s)
+          s = s.replace("resolveGroqModel(apiKey, true)", '"meta-llama/llama-4-scout-17b-16e-instruct"')
+          s = s.replace("resolveGroqModel(apiKey, false)", '"llama-3.3-70b-versatile"')
+
+          # Возвращаем обычное окно активации для новых пользователей (без ложного "вы отписались")
+          s = re.sub(
+              r'if \(!hasAccess\) \{\s*AlertDialog\.Builder\(this@MainActivity\)\.setTitle\("Подписка приостановлена"\).*?\.show\(\)',
+              'if (!hasAccess) {\n                    showActivationDialog()',
+              s
+          )
+
+          # Живой характер общения
           lp = "Ты — Apex AI, живой голосовой и текстовый интеллект уровня Джарвиса, созданный инженером Derek Stealth. Никогда не отвечай сухо в два слова! Если человек делится настроением или проблемой, поддержи его тепло и по-человечески, задай встречный вопрос. Если просят решить задачу — дай глубокий, развёрнутый разбор по шагам."
           s = s.replace("Ты — Apex AI, персональный интеллектуальный ассистент твоего создателя Derek Stealth. Отвечай чётко, по делу и на русском языке.", lp)
           s = s.replace("Ты — Apex AI Assistant, умный голосовой и текстовый помощник, созданный разработчиком Derek Stealth. Отвечай понятно, дружелюбно и на русском языке.", lp)
 
+          # Убираем дублирование пушей в ТГ-бот
           s = re.sub(r'sendDirectToAdminBot\("📢 PUSH-РАССЫЛКА APEX AI.*?\)', "", s)
-
-          s = s.replace("moveTo(50f, 30f)", "moveTo(49.5f, 32f); lineTo(58.5f, 32f); lineTo(73f, 75f); lineTo(65.2f, 75f); lineTo(61.8f, 64.5f); lineTo(47.2f, 64.5f); lineTo(49.2f, 58.2f); lineTo(59.8f, 58.2f); lineTo(54f, 40f); lineTo(42.8f, 75f); lineTo(35f, 75f); close(); /*")
-          s = s.replace("lineTo(33f, 78f)\n                    close()", "*/")
-
-          auto_fn = '''
-                  private fun resolveGroqModel(apiKey: String, needVision: Boolean): String {
-                      try {
-                          val mConn = URL("https://groq.com").openConnection() as HttpURLConnection
-                          mConn.requestMethod = "GET"
-                          mConn.setRequestProperty("Authorization", "Bearer $apiKey")
-                          mConn.connectTimeout = 10000
-                          mConn.readTimeout = 10000
-                          if (mConn.responseCode in 200..299) {
-                              val arr = JSONObject(mConn.inputStream.bufferedReader().use { it.readText() }).optJSONArray("data")
-                              val ids = mutableListOf<String>()
-                              if (arr != null) {
-                                  for (i in 0 until arr.length()) {
-                                      val id = arr.getJSONObject(i).optString("id", "")
-                                      if (id.isNotEmpty() && !id.contains("whisper") && !id.contains("guard") && !id.contains("tts")) ids.add(id)
-                                  }
-                              }
-                              if (needVision) {
-                                  return ids.firstOrNull { it.contains("vision") || it.contains("scout") || it.contains("maverick") || it.contains("llama-4") }
-                                      ?: ids.firstOrNull() ?: "llama-3.3-70b-versatile"
-                              } else {
-                                  val prefsOrder = listOf("llama-3.3-70b", "llama-4", "qwen", "70b", "32b", "8b", "gemma")
-                                  for (tag in prefsOrder) {
-                                      val found = ids.firstOrNull { it.contains(tag, true) }
-                                      if (found != null) return found
-                                  }
-                                  if (ids.isNotEmpty()) return ids.first()
-                              }
-                          }
-                      } catch (_: Exception) {}
-                      return if (needVision) "meta-llama/llama-4-scout-17b-16e-instruct" else "llama-3.3-70b-versatile"
-                  }
-          '''
-
-          if "resolveGroqModel" not in s:
-              s = s.replace("fun queryBrainDirect(", auto_fn + "\n        fun queryBrainDirect(")
-              s = s.replace('"llama-3.2-90b-vision-preview"', "resolveGroqModel(apiKey, true)")
-              s = s.replace('"llama-3.3-70b-versatile"', "resolveGroqModel(apiKey, false)")
-
-          unsub_msg = "Мы заметили, что вы отписались от нашего официального Telegram-канала.\\n\\nApex AI работает бесплатно только для подписчиков нашего сообщества. Пожалуйста, подпишитесь обратно, чтобы снова пользоваться ассистентом!"
-          s = s.replace(
-              "if (!hasAccess) {\n                    showActivationDialog()",
-              f'if (!hasAccess) {{\n                    AlertDialog.Builder(this@MainActivity).setTitle("Подписка приостановлена").setMessage("{unsub_msg}").setPositiveButton("Подписаться на наш канал") {{ _, _ -> showActivationDialog() }}.setNegativeButton("Закрыть", null).show()'
-          )
 
           open(p, "w").write(s)
           EOF
