@@ -89,10 +89,11 @@ code2 = rf'''
                     return "Сегодня " + sdf.format(java.util.Date()) + "."
                 }}
                 if (q.contains("будильник")) {{
+                                    if (q.contains("будильник")) {{
                     val nums = Regex("\\d+").findAll(q).map {{ it.value.toInt() }}.toList()
                     if (nums.isNotEmpty()) {{
-                        val h = nums.coerceIn(0, 23)
-                        val m = if (nums.size > 1) nums.coerceIn(0, 59) else 0
+                        val h = nums.first().coerceIn(0, 23)
+                        val m = nums.getOrElse(1) {{ 0 }}.coerceIn(0, 59)
                         val i = Intent(android.provider.AlarmClock.ACTION_SET_ALARM).apply {{
                             putExtra(android.provider.AlarmClock.EXTRA_HOUR, h)
                             putExtra(android.provider.AlarmClock.EXTRA_MINUTES, m)
@@ -106,7 +107,8 @@ code2 = rf'''
                 if (q.contains("таймер")) {{
                     val nums = Regex("\\d+").findAll(q).map {{ it.value.toInt() }}.toList()
                     if (nums.isNotEmpty()) {{
-                        val sec = if (q.contains("час")) nums * 3600 else if (q.contains("сек")) nums else nums * 60
+                        val v = nums.first()
+                        val sec = if (q.contains("час")) v * 3600 else if (q.contains("сек")) v else v * 60
                         val i = Intent(android.provider.AlarmClock.ACTION_SET_TIMER).apply {{
                             putExtra(android.provider.AlarmClock.EXTRA_LENGTH, sec)
                             putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, true)
@@ -116,6 +118,7 @@ code2 = rf'''
                         return "Таймер запущен."
                     }}
                 }}
+                
                 if (q.contains("фонарик") || q.contains("включи свет") || q.contains("выключи свет")) {{
                     val cm = ctx.getSystemService(Context.CAMERA_SERVICE) as android.hardware.camera2.CameraManager
                     val id = cm.cameraIdList.firstOrNull() ?: return null
