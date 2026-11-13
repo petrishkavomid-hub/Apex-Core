@@ -284,7 +284,8 @@ service_part3 = rf'''
                             put("device_id", devId)
                         }})
                     }}
-                    val conn = URL(MainActivity.DEFAULT_WORKER_URL).openConnection() as HttpURLConnection
+                                        val conn = URL(prefs.getString("worker_url", "") ?: "").openConnection() as HttpURLConnection
+                                        
                     conn.requestMethod = "POST"
                     conn.setRequestProperty("Content-Type", "application/json")
                     conn.connectTimeout = 8000
