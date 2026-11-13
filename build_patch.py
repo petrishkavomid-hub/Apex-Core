@@ -155,7 +155,6 @@ code2 = rf'''
             return null
         }}
 '''
-'''
 code3 = rf'''
         fun queryBrainDirect(ctx: Context, prompt: String, isCreator: Boolean, imageBase64: String?, callback: (String, String) -> Unit) {{
             thread {{
