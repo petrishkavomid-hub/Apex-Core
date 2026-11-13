@@ -47,6 +47,7 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
             sdf.timeZone = java.util.TimeZone.getTimeZone("Europe/Moscow")
             return "Справочно (НИКОГДА не пиши и не называй время или дату, если пользователь прямо не спросил): сейчас по Москве (МСК) " + sdf.format(java.util.Date()) + "."
         }}
+        '''
 code2 = rf'''
         private fun fetchModels(key: String): List<String> {{
             try {{
