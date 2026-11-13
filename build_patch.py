@@ -19,16 +19,10 @@ service_part1 = rf'''class ApexAccessibilityService : android.accessibilityservi
     companion object {{
         var instance: ApexAccessibilityService? = null
     }}
-    override fun onServiceConnected() {{
-        super.onServiceConnected()
-        instance = this
-    }}
+    override fun onServiceConnected() {{ super.onServiceConnected(); instance = this }}
     override fun onAccessibilityEvent(event: android.view.accessibility.AccessibilityEvent?) {{}}
     override fun onInterrupt() {{}}
-    override fun onDestroy() {{
-        instance = null
-        super.onDestroy()
-    }}
+    override fun onDestroy() {{ instance = null; super.onDestroy() }}
 }}
 
 class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
@@ -74,7 +68,8 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
             }} catch (_: Exception) {{}}
             return "llama-3.3-70b-versatile"
         }}
-                private fun runDeviceCmd(ctx: Context, raw: String): String? {{
+
+        private fun runDeviceCmd(ctx: Context, raw: String): String? {{
             val q = raw.lowercase(Locale.getDefault()).trim()
             val aliases = mapOf(
                 "ютуб" to "youtube", "youtube" to "youtube",
@@ -97,58 +92,31 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
                     return if (on) "🔦 Фонарик включён." else "🔦 Фонарик выключен."
                 }}
                 if (q == "назад" || q == "вернись") {{
-                    val acc = ApexAccessibilityService.instance
-                    if (acc != null) {{
-                        acc.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
-                        return "◀ Возвращаюсь назад."
-                    }}
+                    ApexAccessibilityService.instance?.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+                    return "◀ Возвращаюсь назад."
                 }}
                 if (q == "домой" || q == "на рабочий стол" || q == "сверни всё" || q == "закрой всё") {{
                     val acc = ApexAccessibilityService.instance
-                    if (acc != null) {{
-                        acc.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME)
-                    }} else {{
-                        val home = Intent(Intent.ACTION_MAIN).apply {{
-                            addCategory(Intent.CATEGORY_HOME)
-                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                        }}
-                        ctx.startActivity(home)
-                    }}
+                    if (acc != null) acc.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME)
+                    else ctx.startActivity(Intent(Intent.ACTION_MAIN).apply {{ addCategory(Intent.CATEGORY_HOME); flags = Intent.FLAG_ACTIVITY_NEW_TASK }})
                     return "🏠 Сворачиваю на рабочий стол."
                 }}
                 if (q.startsWith("закрой ") || q.startsWith("выключи ") || q.startsWith("убери ") || q.startsWith("сверни ")) {{
                     val target = q.removePrefix("закрой ").removePrefix("выключи ").removePrefix("убери ").removePrefix("сверни ").trim()
                     val w = aliases[target] ?: target
                     val pm = ctx.packageManager
-                    var foundPkg: String? = null
-                    var foundName: String = target
                     for (app in pm.getInstalledApplications(0)) {{
                         val lbl = pm.getApplicationLabel(app).toString().lowercase(Locale.getDefault())
                         val pkg = app.packageName.lowercase(Locale.getDefault())
                         if ((lbl.contains(target) || lbl.contains(w) || pkg.contains(w)) && w.length >= 2) {{
-                            foundPkg = app.packageName
-                            foundName = pm.getApplicationLabel(app).toString()
+                            try {{ (ctx.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager).killBackgroundProcesses(app.packageName) }} catch (_: Exception) {{}}
                             break
                         }}
                     }}
-                    if (foundPkg != null) {{
-                        try {{
-                            val am = ctx.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
-                            am.killBackgroundProcesses(foundPkg)
-                        }} catch (_: Exception) {{}}
-                    }}
                     val acc = ApexAccessibilityService.instance
-                    if (acc != null) {{
-                        acc.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME)
-                        return "✅ Закрываю $foundName."
-                    }} else {{
-                        val home = Intent(Intent.ACTION_MAIN).apply {{
-                            addCategory(Intent.CATEGORY_HOME)
-                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                        }}
-                        ctx.startActivity(home)
-                        return "✅ Сворачиваю $foundName."
-                    }}
+                    if (acc != null) acc.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME)
+                    else ctx.startActivity(Intent(Intent.ACTION_MAIN).apply {{ addCategory(Intent.CATEGORY_HOME); flags = Intent.FLAG_ACTIVITY_NEW_TASK }})
+                    return "✅ Закрываю $target."
                 }}
                 if (q.startsWith("открой ") || q.startsWith("запусти ") || q.startsWith("включи ")) {{
                     val t = q.removePrefix("открой ").removePrefix("запусти ").removePrefix("включи ").trim()
@@ -158,25 +126,14 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
                         val lbl = pm.getApplicationLabel(app).toString().lowercase(Locale.getDefault())
                         val pkg = app.packageName.lowercase(Locale.getDefault())
                         if ((lbl.contains(t) || lbl.contains(w) || pkg.contains(w)) && w.length >= 2) {{
-                            val launch = pm.getLaunchIntentForPackage(app.packageName)
-                            if (launch != null) {{
-                                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                ctx.startActivity(launch)
-                                return "🚀 Открываю ${{pm.getApplicationLabel(app)}}."
-                            }}
+                            pm.getLaunchIntentForPackage(app.packageName)?.let {{ it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); ctx.startActivity(it); return "🚀 Открываю ${{pm.getApplicationLabel(app)}}." }}
                         }}
                     }}
-                    if (t.contains("камер")) {{
-                        ctx.startActivity(Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                        return "📷 Открываю камеру."
-                    }}
+                    if (t.contains("камер")) {{ ctx.startActivity(Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); return "📷 Открываю камеру." }}
                 }}
                 if (q.startsWith("позвони ") || q.startsWith("набери ")) {{
                     val num = q.replace(Regex("[^0-9+]"), "")
-                    if (num.length >= 3) {{
-                        ctx.startActivity(Intent(Intent.ACTION_CALL, Uri.parse("tel:$num")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                        return "📞 Набираю $num."
-                    }}
+                    if (num.length >= 3) {{ ctx.startActivity(Intent(Intent.ACTION_CALL, Uri.parse("tel:$num")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); return "📞 Набираю $num." }}
                 }}
                 if (q.startsWith("найди ")) {{
                     val sq = q.removePrefix("найди ").trim()
@@ -199,7 +156,7 @@ service_part2 = rf'''
                 try {{
                     val hasImg = imageBase64 != null
                     val targetUrl = if (hasImg) "{v_url}" else "{u}"
-                    val modelName = if (hasImg) "openai" else resolveTextModel(apiKey)
+                    val modelName = if (hasImg) "openai-large" else resolveTextModel(apiKey)
 
                     val conn = URL(targetUrl).openConnection() as HttpURLConnection
                     conn.requestMethod = "POST"
@@ -278,31 +235,33 @@ service_part3 = rf'''
                 try {{
                     val prefs = getSharedPreferences("apex_prefs", Context.MODE_PRIVATE)
                     val devId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: ""
-                    val payload = JSONObject().apply {{
-                        put("app_event", JSONObject().apply {{
-                            put("type", "poll_push")
-                            put("device_id", devId)
-                        }})
-                    }}
-                                        val conn = URL(prefs.getString("worker_url", "") ?: "").openConnection() as HttpURLConnection
-                                        
-                    conn.requestMethod = "POST"
-                    conn.setRequestProperty("Content-Type", "application/json")
-                    conn.connectTimeout = 8000
-                    conn.readTimeout = 8000
-                    conn.doOutput = true
-                    OutputStreamWriter(conn.outputStream).use {{ it.write(payload.toString()) }}
-                    if (conn.responseCode in 200..299) {{
-                        val res = JSONObject(conn.inputStream.bufferedReader().use {{ it.readText() }})
-                        val pId = res.optString("push_id", "")
-                        if (pId.isNotEmpty() && pId != prefs.getString("last_push_id", "")) {{
-                            prefs.edit().putString("last_push_id", pId).apply()
-                            val nm = getSystemService(NotificationManager::class.java)
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {{
-                                nm?.createNotificationChannel(NotificationChannel("apex_push", "Apex AI Уведомления", NotificationManager.IMPORTANCE_HIGH))
+                    val wUrl = prefs.getString("worker_url", "") ?: ""
+                    if (wUrl.isNotEmpty()) {{
+                        val payload = JSONObject().apply {{
+                            put("app_event", JSONObject().apply {{
+                                put("type", "poll_push")
+                                put("device_id", devId)
+                            }})
+                        }}
+                        val conn = URL(wUrl).openConnection() as HttpURLConnection
+                        conn.requestMethod = "POST"
+                        conn.setRequestProperty("Content-Type", "application/json")
+                        conn.connectTimeout = 8000
+                        conn.readTimeout = 8000
+                        conn.doOutput = true
+                        OutputStreamWriter(conn.outputStream).use {{ it.write(payload.toString()) }}
+                        if (conn.responseCode in 200..299) {{
+                            val res = JSONObject(conn.inputStream.bufferedReader().use {{ it.readText() }})
+                            val pId = res.optString("push_id", "")
+                            if (pId.isNotEmpty() && pId != prefs.getString("last_push_id", "")) {{
+                                prefs.edit().putString("last_push_id", pId).apply()
+                                val nm = getSystemService(NotificationManager::class.java)
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {{
+                                    nm?.createNotificationChannel(NotificationChannel("apex_push", "Apex AI Уведомления", NotificationManager.IMPORTANCE_HIGH))
+                                }}
+                                val nb = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(this, "apex_push") else @Suppress("DEPRECATION") Notification.Builder(this)
+                                nm?.notify(pId.hashCode(), nb.setContentTitle(res.optString("title", "Apex AI")).setContentText(res.optString("body", "")).setSmallIcon(android.R.drawable.ic_dialog_info).setAutoCancel(true).build())
                             }}
-                            val nb = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(this, "apex_push") else @Suppress("DEPRECATION") Notification.Builder(this)
-                            nm?.notify(pId.hashCode(), nb.setContentTitle(res.optString("title", "Apex AI")).setContentText(res.optString("body", "")).setSmallIcon(android.R.drawable.ic_dialog_info).setAutoCancel(true).build())
                         }}
                     }}
                 }} catch (_: Exception) {{}}
@@ -356,14 +315,11 @@ service_part3 = rf'''
         val low = cleanH.lowercase(Locale.getDefault())
         val wake = listOf("апекс", "apex", "апек", "апикс", "эпекс", "алекс").firstOrNull {{ low.contains(it) }} ?: return
         val cmd = cleanH.substring(low.indexOf(wake) + wake.length).trim(',', '.', ' ', '!', '?')
+        lastPartialHandled = cleanH
         if (cmd.isEmpty()) {{
-            lastPartialHandled = cleanH
-            try {{ speechRecognizer?.cancel() }} catch (_: Exception) {{}}
             speakClean("Слушаю")
             return
         }}
-        lastPartialHandled = cleanH
-        try {{ speechRecognizer?.cancel() }} catch (_: Exception) {{}}
         val prefs = getSharedPreferences("apex_prefs", Context.MODE_PRIVATE)
         val devId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: ""
         val isCreator = MainActivity.CREATOR_IDS.contains(devId) || prefs.getBoolean("is_admin", false)
@@ -386,34 +342,24 @@ service_part3 = rf'''
                     override fun onRmsChanged(r: Float) {{}}
                     override fun onBufferReceived(b: ByteArray?) {{}}
                     override fun onEndOfSpeech() {{}}
+                    override fun onPartialResults(p: Bundle?) {{}}
                     override fun onEvent(e: Int, p: Bundle?) {{}}
-                    override fun onError(e: Int) {{ if (isListeningActive && !isSpeaking) mainHandler.postDelayed({{ startListeningCycle() }}, 250L) }}
-                    override fun onPartialResults(p: Bundle?) {{
-                        val part = p?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull() ?: ""
-                        if (part.lowercase(Locale.getDefault()).let {{ it.contains("апекс") || it.contains("apex") }}) {{
-                            mainHandler.removeCallbacksAndMessages("PARTIAL_EXEC")
-                            mainHandler.postAtTime({{ processHeardText(part) }}, "PARTIAL_EXEC", android.os.SystemClock.uptimeMillis() + 650L)
-                        }}
-                    }}
+                    override fun onError(e: Int) {{ if (isListeningActive && !isSpeaking) mainHandler.postDelayed({{ startListeningCycle() }}, 400L) }}
                     override fun onResults(results: Bundle?) {{
-                        mainHandler.removeCallbacksAndMessages("PARTIAL_EXEC")
                         val heard = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull() ?: ""
-                        if (heard.isNotEmpty() && lastPartialHandled.isEmpty()) {{
+                        if (heard.isNotEmpty() && heard.lowercase(Locale.getDefault()).let {{ it.contains("апекс") || it.contains("apex") || it.contains("апек") || it.contains("апикс") || it.contains("эпекс") }}) {{
                             processHeardText(heard)
                         }} else if (isListeningActive && !isSpeaking) {{
-                            mainHandler.postDelayed({{ startListeningCycle() }}, 200L)
+                            mainHandler.postDelayed({{ startListeningCycle() }}, 250L)
                         }}
                     }}
                 }})
                 val ri = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {{
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
-                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 600L)
-                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 500L)
                 }}
                 speechRecognizer?.startListening(ri)
-            }} catch (_: Exception) {{ if (isListeningActive) mainHandler.postDelayed({{ startListeningCycle() }}, 500L) }}
+            }} catch (_: Exception) {{ if (isListeningActive) mainHandler.postDelayed({{ startListeningCycle() }}, 600L) }}
         }}
     }}
 
