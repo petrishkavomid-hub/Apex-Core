@@ -287,7 +287,35 @@ service_part2 = f'''
 '''
 
 open(p, "w").write(s + service_part1 + service_part2)
-'''
 
-open(p, "w").write(s + service_part1 + service_part2)
-'''
+ns = base64.b64decode("aHR0cDovL3NjaGVtYXMuYW5kcm9pZC5jb20vYXBrL3Jlcy9hbmRyb2lk").decode()
+perms = [
+    "RECORD_AUDIO", "INTERNET", "CAMERA", "CALL_PHONE", "SYSTEM_ALERT_WINDOW",
+    "FOREGROUND_SERVICE", "FOREGROUND_SERVICE_MICROPHONE", "POST_NOTIFICATIONS",
+    "REQUEST_INSTALL_PACKAGES", "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS", "QUERY_ALL_PACKAGES"
+]
+p_xml = "\n".join([f'    <uses-permission android:name="android.permission.{x}" />' for x in perms])
+m_xml = f'''<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="{ns}">
+{p_xml}
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.telephony" android:required="false" />
+    <application android:allowBackup="true" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:label="Apex AI" android:supportsRtl="true" android:theme="@style/Theme.AppCompat.NoActionBar">
+        <activity android:name=".MainActivity" android:exported="true" android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <service android:name=".ApexCoreService" android:enabled="true" android:exported="false" android:foregroundServiceType="microphone" />
+    </application>
+</manifest>'''
+open("app/src/main/AndroidManifest.xml", "w").write(m_xml)
+
+os.makedirs("app/src/main/res/drawable", exist_ok=True)
+os.makedirs("app/src/main/res/mipmap-anydpi-v26", exist_ok=True)
+open("app/src/main/res/drawable/ic_apex_fg.xml", "w").write(f'<?xml version="1.0" encoding="utf-8"?><vector xmlns:android="{ns}" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108"><path android:fillColor="#000000" android:pathData="M49.5,32 L58.5,32 L73,75 L65.2,75 L61.8,64.5 L47.2,64.5 L49.2,58.2 L59.8,58.2 L54,40 L42.8,75 L35,75 Z" /></vector>')
+open("app/src/main/res/drawable/ic_apex_bg.xml", "w").write(f'<?xml version="1.0" encoding="utf-8"?><vector xmlns:android="{ns}" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108"><path android:fillColor="#FFFFFF" android:pathData="M0,0h108v108h-108z" /></vector>')
+ad = f'<?xml version="1.0" encoding="utf-8"?><adaptive-icon xmlns:android="{ns}"><background android:drawable="@drawable/ic_apex_bg" /><foreground android:drawable="@drawable/ic_apex_fg" /></adaptive-icon>'
+open("app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml", "w").write(ad)
+open("app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml", "w").write(ad)
