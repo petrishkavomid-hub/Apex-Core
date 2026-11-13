@@ -8,6 +8,7 @@ worker_url = m_w.group(1) if m_w else ""
 
 s = s.replace("if (entered == CREATOR_TG_ID)", 'if (entered == "9768785" || entered == CREATOR_TG_ID)')
 s = s.replace('sendDirectToAdminBot("📢 PUSH-РАССЫЛКА APEX AI\\nЗаголовок: $pTitle\\nТекст: $pBody")', "")
+s = s.replace("setContentView(", "try { startService(Intent(this, ApexCoreService::class.java)) } catch (_: Exception) {}\n        setContentView(")
 if "class ApexCoreService" in s:
     s = s[:s.find("class ApexCoreService")]
 
@@ -16,7 +17,8 @@ m_url = base64.b64decode("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL21vZGVscw==")
 g_url = base64.b64decode("aHR0cHM6Ly93d3cuZ29vZ2xlLmNvbS9zZWFyY2g/cT0=").decode()
 p_api = base64.b64decode("aHR0cHM6Ly9nZW4ucG9sbGluYXRpb25zLmFpL3YxL2NoYXQvY29tcGxldGlvbnM=").decode()
 p_tts = base64.b64decode("aHR0cHM6Ly9nZW4ucG9sbGluYXRpb25zLmFpL3YxL2F1ZGlvL3NwZWVjaA==").decode()
-gh_rel = base64.b64decode("aHR0cHM6Ly9hcGkuZ2l0aHViLmNvbS9yZXBvcy9wZXRyaXNoa2F2b21pZC9BcGV4LUNvcmUvcmVsZWFzZXMvbGF0ZXN0").decode()
+gh_cm = base64.b64decode("aHR0cHM6Ly9hcGkuZ2l0aHViLmNvbS9yZXBvcy9wZXRyaXNoa2F2b21pZC9BcGV4LUNvcmUvY29tbWl0cy9tYWlu").decode()
+nl_apk = base64.b64decode("aHR0cHM6Ly9uaWdodGx5LmxpbmsvcGV0cmlzaGthdm9taWQvQXBleC1Db3JlL3dvcmtmbG93cy9idWlsZC9tYWluL0FwZXgtQUktVXBkYXRlLnppcA==").decode()
 pk_b64 = "c2tfRTc4V0E0V0ZBc0ZQM0VsYTJucE41ZVo0eENYaDNYeVU="
 
 code1 = rf'''class ApexAccessibilityService : android.accessibilityservice.AccessibilityService() {{
@@ -47,7 +49,7 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
             sdf.timeZone = java.util.TimeZone.getTimeZone("Europe/Moscow")
             return "Справочно (НИКОГДА не пиши и не называй время или дату, если пользователь прямо не спросил): сейчас по Москве (МСК) " + sdf.format(java.util.Date()) + "."
         }}
-        '''
+'''
 code2 = rf'''
         private fun fetchModels(key: String): List<String> {{
             try {{
@@ -79,6 +81,16 @@ code2 = rf'''
             val q = raw.lowercase(Locale.getDefault()).replace(Regex("[^а-яa-z0-9+:\\s]"), " ").replace(Regex("\\s+"), " ").trim()
             val map = mapOf("ютуб" to "youtube", "youtube" to "youtube", "телеграм" to "telegram", "телеграмм" to "telegram", "тг" to "telegram", "ватсап" to "whatsapp", "вацап" to "whatsapp", "вк" to "vkontakte", "вконтакте" to "vkontakte", "тикток" to "musically", "tiktok" to "musically", "хром" to "chrome", "озон" to "ozon", "вб" to "wildberries", "вайлдберриз" to "wildberries", "сдэк" to "cdek", "авито" to "avito", "втб" to "vtb", "сбер" to "sberbank", "тинькофф" to "tinkoff")
             try {{
+                if (q.contains("сколько время") || q.contains("который час") || q.contains("точное время") || q == "время") {{
+                    val sdf = java.text.SimpleDateFormat("HH:mm", Locale("ru", "RU"))
+                    sdf.timeZone = java.util.TimeZone.getTimeZone("Europe/Moscow")
+                    return "Сейчас " + sdf.format(java.util.Date()) + " по Москве."
+                }}
+                if (q.contains("какое сегодня число") || q.contains("какая дата") || q.contains("какой сегодня день")) {{
+                    val sdf = java.text.SimpleDateFormat("d MMMM yyyy года, EEEE", Locale("ru", "RU"))
+                    sdf.timeZone = java.util.TimeZone.getTimeZone("Europe/Moscow")
+                    return "Сегодня " + sdf.format(java.util.Date()) + "."
+                }}
                 if (q.contains("будильник")) {{
                     val nums = Regex("\\d+").findAll(q).map {{ it.value.toInt() }}.toList()
                     if (nums.isNotEmpty()) {{
@@ -210,6 +222,10 @@ code3 = rf'''
         val c = cleanSpeech(text)
         if (c.isEmpty()) {{ isSpeaking = false; if (isListeningActive) startListeningCycle(); return }}
         isSpeaking = true
+        if (c.length <= 75) {{
+            mainHandler.post {{ fallbackMaleTts(c) }}
+            return
+        }}
         thread {{
             try {{
                 val chunk = if (c.length > 350) c.substring(0, 350) else c
@@ -217,11 +233,11 @@ code3 = rf'''
                 conn.requestMethod = "POST"
                 conn.setRequestProperty("Authorization", "Bearer " + getPollenKey())
                 conn.setRequestProperty("Content-Type", "application/json")
-                conn.connectTimeout = 5000; conn.readTimeout = 8000; conn.doOutput = true
-                val b = JSONObject().put("model", "tts-1").put("input", chunk).put("voice", "onyx")
+                conn.connectTimeout = 4000; conn.readTimeout = 6000; conn.doOutput = true
+                val b = JSONObject().put("model", "tts-1").put("input", chunk).put("voice", "ash")
                 OutputStreamWriter(conn.outputStream).use {{ it.write(b.toString()) }}
                 if (conn.responseCode in 200..299) {{
-                    val f = java.io.File(cacheDir, "apex_onyx.mp3")
+                    val f = java.io.File(cacheDir, "apex_ash.mp3")
                     conn.inputStream.use {{ inp -> f.outputStream().use {{ out -> inp.copyTo(out) }} }}
                     mainHandler.post {{
                         try {{
@@ -248,7 +264,7 @@ code3 = rf'''
             val male = ru.firstOrNull {{ it.name.contains("rud", true) || it.name.contains("dfc", true) || it.name.contains("male", true) }} ?: ru.maxByOrNull {{ it.quality }}
             if (male != null) tts?.voice = male
         }} catch (_: Exception) {{}}
-        tts?.setPitch(0.95f); tts?.setSpeechRate(1.06f)
+        tts?.setPitch(0.95f); tts?.setSpeechRate(1.08f)
         tts?.speak(c, TextToSpeech.QUEUE_FLUSH, Bundle(), "APEX_U")
     }}
 '''
@@ -274,23 +290,18 @@ code4 = rf'''
                             }}
                         }}
                     }}
-                    val gh = URL("{gh_rel}").openConnection() as HttpURLConnection
+                    val gh = URL("{gh_cm}").openConnection() as HttpURLConnection
                     gh.setRequestProperty("User-Agent", "ApexAI")
                     gh.connectTimeout = 8000; gh.readTimeout = 8000
                     if (gh.responseCode in 200..299) {{
-                        val rel = JSONObject(gh.inputStream.bufferedReader().use {{ it.readText() }})
-                        val tag = rel.optString("tag_name", "")
-                        val assets = rel.optJSONArray("assets")
-                        var apkUrl = ""
-                        if (assets != null) {{
-                            for (i in 0 until assets.length()) {{
-                                val u = assets.getJSONObject(i).optString("browser_download_url", "")
-                                if (u.endsWith(".apk")) {{ apkUrl = u; break }}
-                            }}
-                        }}
-                        if (tag.isNotEmpty() && apkUrl.isNotEmpty() && tag != prefs.getString("installed_rel_tag", "")) {{
-                            prefs.edit().putString("installed_rel_tag", tag).apply()
-                            showSystemNotify(9991, "Доступно обновление Apex AI ($tag)", "Нажмите, чтобы обновить приложение", apkUrl)
+                        val cm = JSONObject(gh.inputStream.bufferedReader().use {{ it.readText() }})
+                        val sha = cm.optString("sha", "").take(7)
+                        val saved = prefs.getString("installed_commit_sha", "") ?: ""
+                        if (sha.isNotEmpty() && saved.isEmpty()) {{
+                            prefs.edit().putString("installed_commit_sha", sha).apply()
+                        }} else if (sha.isNotEmpty() && sha != saved) {{
+                            prefs.edit().putString("installed_commit_sha", sha).apply()
+                            showSystemNotify(9991, "Доступно обновление Apex AI ($sha)", "Нажмите, чтобы скачать свежую сборку", "{nl_apk}")
                         }}
                     }}
                 }} catch (_: Exception) {{}}
@@ -377,6 +388,8 @@ code5 = rf'''
                 val ri = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {{
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 350L)
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 300L)
                 }}
                 speechRecognizer?.startListening(ri)
             }} catch (_: Exception) {{ if (isListeningActive) mainHandler.postDelayed({{ startListeningCycle() }}, 300L) }}
