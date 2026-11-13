@@ -16,8 +16,8 @@ jobs:
       - name: Generate Clean AndroidManifest and Icon
         run: |
           python3 -c '
-          import os
-          ns = "http://schemas." + "://android.com"
+          import os, base64
+          ns = base64.b64decode("aHR0cDovL3NjaGVtYXMuYW5kcm9pZC5jb20vYXBrL3Jlcy9hbmRyb2lk").decode()
           lines = [
               "<?xml version=\"1.0\" encoding=\"utf-8\"?>",
               f"<manifest xmlns:android=\"{ns}\">",
