@@ -13,7 +13,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Fix AI Response, Activation Dialog and Manifest
+      - name: Patch AI Models, Alice Wake-Word and Mute Beep
         run: |
           cat << 'EOF' | python3
           import re, base64
@@ -21,30 +21,92 @@ jobs:
           p = "app/src/main/java/com/apex/assistant/MainActivity.kt"
           s = open(p).read()
 
+          # 1. Вход в Панель разработчика по 9768785 + точный URL Groq + 4096 токенов
           s = s.replace("if (entered == CREATOR_TG_ID)", 'if (entered == "9768785" || entered == CREATOR_TG_ID)')
           u = base64.b64decode("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL2NoYXQvY29tcGxldGlvbnM=").decode()
           s = re.sub(r"fun groqUrl\(\): String = .*", f'fun groqUrl(): String = "{u}"', s)
           s = s.replace('put("max_tokens", 1024)', 'put("max_tokens", 4096)')
+          s = s.replace('Ошибка сервера ИИ ($code). Проверьте интернет или ключ в панели разработчика.', 'Ошибка ИИ ($code): $rawResp')
 
-          # Убираем сломанный resolveGroqModel и ставим рабочие модели напрямую
-          s = re.sub(r"private fun resolveGroqModel[\s\S]*?fun queryBrainDirect\(", "fun queryBrainDirect(", s)
-          s = s.replace("resolveGroqModel(apiKey, true)", '"meta-llama/llama-4-scout-17b-16e-instruct"')
-          s = s.replace("resolveGroqModel(apiKey, false)", '"llama-3.3-70b-versatile"')
-
-          # Возвращаем обычное окно активации для новых пользователей (без ложного "вы отписались")
-          s = re.sub(
-              r'if \(!hasAccess\) \{\s*AlertDialog\.Builder\(this@MainActivity\)\.setTitle\("Подписка приостановлена"\).*?\.show\(\)',
-              'if (!hasAccess) {\n                    showActivationDialog()',
-              s
-          )
-
-          # Живой характер общения
+          # 2. Живой характер общения + без дублей пушей в ТГ-бот + жирная буква А
           lp = "Ты — Apex AI, живой голосовой и текстовый интеллект уровня Джарвиса, созданный инженером Derek Stealth. Никогда не отвечай сухо в два слова! Если человек делится настроением или проблемой, поддержи его тепло и по-человечески, задай встречный вопрос. Если просят решить задачу — дай глубокий, развёрнутый разбор по шагам."
           s = s.replace("Ты — Apex AI, персональный интеллектуальный ассистент твоего создателя Derek Stealth. Отвечай чётко, по делу и на русском языке.", lp)
           s = s.replace("Ты — Apex AI Assistant, умный голосовой и текстовый помощник, созданный разработчиком Derek Stealth. Отвечай понятно, дружелюбно и на русском языке.", lp)
-
-          # Убираем дублирование пушей в ТГ-бот
           s = re.sub(r'sendDirectToAdminBot\("📢 PUSH-РАССЫЛКА APEX AI.*?\)', "", s)
+          s = s.replace("moveTo(50f, 30f)", "moveTo(49.5f, 32f); lineTo(58.5f, 32f); lineTo(73f, 75f); lineTo(65.2f, 75f); lineTo(61.8f, 64.5f); lineTo(47.2f, 64.5f); lineTo(49.2f, 58.2f); lineTo(59.8f, 58.2f); lineTo(54f, 40f); lineTo(42.8f, 75f); lineTo(35f, 75f); close(); /*")
+          s = s.replace("lineTo(33f, 78f)\n                    close()", "*/")
+
+          # 3. Автопоиск актуальной рабочей модели прямо с сервера Groq
+          auto_fn = '''
+                  private fun pickLiveGroqModel(apiKey: String, needVision: Boolean): String {
+                      try {
+                          val mUrl = "https://groq.com"
+                          val c = URL(mUrl).openConnection() as HttpURLConnection
+                          c.requestMethod = "GET"
+                          c.setRequestProperty("Authorization", "Bearer $apiKey")
+                          c.connectTimeout = 8000
+                          c.readTimeout = 8000
+                          if (c.responseCode in 200..299) {
+                              val arr = JSONObject(c.inputStream.bufferedReader().use { it.readText() }).optJSONArray("data")
+                              val ids = mutableListOf<String>()
+                              if (arr != null) {
+                                  for (i in 0 until arr.length()) {
+                                      val id = arr.getJSONObject(i).optString("id", "")
+                                      if (id.isNotEmpty() && !id.contains("whisper") && !id.contains("guard") && !id.contains("tts")) ids.add(id)
+                                  }
+                              }
+                              if (needVision) {
+                                  return ids.firstOrNull { it.contains("vision") || it.contains("scout") || it.contains("maverick") || it.contains("llama-4") } ?: ids.firstOrNull() ?: "llama-3.3-70b-versatile"
+                              }
+                              for (tag in listOf("70b", "llama-4", "qwen", "32b", "8b", "gemma", "llama")) {
+                                  val hit = ids.firstOrNull { it.contains(tag, true) }
+                                  if (hit != null) return hit
+                              }
+                              if (ids.isNotEmpty()) return ids.first()
+                          }
+                      } catch (_: Exception) {}
+                      return "llama-3.3-70b-versatile"
+                  }
+          '''
+          if "pickLiveGroqModel" not in s:
+              s = s.replace("fun queryBrainDirect(", auto_fn + "\n        fun queryBrainDirect(")
+              s = s.replace('"llama-3.2-90b-vision-preview"', "pickLiveGroqModel(apiKey, true)")
+              s = s.replace('"llama-3.3-70b-versatile"', "pickLiveGroqModel(apiKey, false)")
+                        # 4. Отключение бульканья (MUTE уведомлений на момент старта микрофона) + мгновенная команда «Апекс ...» как у Алисы
+          s = s.replace(
+              "speechRecognizer?.startListening(recIntent)",
+              "try { (getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager).adjustStreamVolume(android.media.AudioManager.STREAM_NOTIFICATION, android.media.AudioManager.ADJUST_MUTE, 0) } catch (_: Exception) {}\n                speechRecognizer?.startListening(recIntent)"
+          )
+          wake_logic = '''
+                        val low = heard.lowercase(Locale.getDefault())
+                        val wakes = listOf("апекс", "apex", "апек", "апикс")
+                        val wakeHit = wakes.firstOrNull { low.contains(it) }
+                        if (wakeHit == null) {
+                            if (isListeningActive) mainHandler.postDelayed({ startListeningCycle() }, 400L)
+                            return
+                        }
+                        val idx = low.indexOf(wakeHit) + wakeHit.length
+                        val cleanCmd = heard.substring(idx).trim(',', '.', ' ', '!', '?')
+                        if (cleanCmd.isEmpty()) {
+                            isSpeaking = true
+                            tts?.speak("Слушаю вас", TextToSpeech.QUEUE_FLUSH, Bundle(), "APEX_UTTERANCE")
+                            return
+                        }
+                        if (isListeningActive) {
+                            val prefs = getSharedPreferences("apex_prefs", Context.MODE_PRIVATE)
+                            val devId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: ""
+                            val isCreator = MainActivity.CREATOR_IDS.contains(devId) || prefs.getBoolean("is_admin", false)
+                            queryBrainDirect(this@ApexCoreService, cleanCmd, isCreator, null) { reply, _ ->
+                                isSpeaking = true
+                                tts?.speak(reply, TextToSpeech.QUEUE_FLUSH, Bundle(), "APEX_UTTERANCE")
+                            }
+                        }
+          '''
+          s = re.sub(
+              r"if \(heard\.isNotEmpty\(\) && isListeningActive\) \{[\s\S]*?\} else if \(isListeningActive\) \{\s*mainHandler\.postDelayed\(\{ startListeningCycle\(\) \}, 900L\)\s*\}",
+              wake_logic.strip(),
+              s
+          )
 
           open(p, "w").write(s)
           EOF
