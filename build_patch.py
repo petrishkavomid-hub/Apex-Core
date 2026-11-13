@@ -13,7 +13,7 @@ if cut != -1:
 u = base64.b64decode("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL2NoYXQvY29tcGxldGlvbnM=").decode()
 m_url = base64.b64decode("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL21vZGVscw==").decode()
 
-service_part1 = f'''class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
+service_part1 = rf'''class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
 
     private var tts: TextToSpeech? = null
     private var speechRecognizer: SpeechRecognizer? = null
@@ -120,7 +120,7 @@ service_part1 = f'''class ApexCoreService : Service(), TextToSpeech.OnInitListen
             return null
         }}
 '''
-service_part2 = f'''
+service_part2 = rf'''
         fun queryBrainDirect(ctx: Context, prompt: String, isCreator: Boolean, imageBase64: String?, callback: (String, String) -> Unit) {{
             thread {{
                 if (imageBase64 == null) {{
