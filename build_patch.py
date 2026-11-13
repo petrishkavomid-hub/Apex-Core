@@ -430,6 +430,15 @@ open("app/src/main/AndroidManifest.xml", "w").write(m_xml)
 fg_b64 = "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPHZlY3RvciB4bWxuczphbmRyb2lkPSJodHRwOi8vc2NoZW1hcy5hbmRyb2lkLmNvbS9hcGsvcmVzL2FuZHJvaWQiIGFuZHJvaWQ6d2lkdGg9IjEwOGRwIiBhbmRyb2lkOmhlaWdodD0iMTA4ZHAiIGFuZHJvaWQ6dmlld3BvcnRXaWR0aD0iMTA4IiBhbmRyb2lkOnZpZXdwb3J0SGVpZ2h0PSIxMDgiPjxwYXRoIGFuZHJvaWQ6ZmlsbENvbG9yPSIjMDAwMDAwIiBhbmRyb2lkOnBhdGhEYXRhPSJNNDkuNSwzMiBMNTguNSwzMiBMNzMsNzUgTDY1LjIsNzUgTDYxLjgsNjQuNSBMNDcuMiw2NC41IEw0OS4yLDU4LjIgTDU5LjgsNTguMiBMNTQsNDAgTDQyLjgsNzUgTDM1LDc1IFoiIC8+PC92ZWN0b3I+"
 bg_b64 = "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPHZlY3RvciB4bWxuczphbmRyb2lkPSJodHRwOi8vc2NoZW1hcy5hbmRyb2lkLmNvbS9hcGsvcmVzL2FuZHJvaWQiIGFuZHJvaWQ6d2lkdGg9IjEwOGRwIiBhbmRyb2lkOmhlaWdodD0iMTA4ZHAiIGFuZHJvaWQ6dmlld3BvcnRXaWR0aD0iMTA4IiBhbmRyb2lkOnZpZXdwb3J0SGVpZ2h0PSIxMDgiPjxwYXRoIGFuZHJvaWQ6ZmlsbENvbG9yPSIjRkZGRkZGIiBhbmRyb2lkOnBhdGhEYXRhPSJNMCwwaDEwOHYxMDhoLTEwOHoiIC8+PC92ZWN0b3I+"
 ad_b64 = "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPGFkYXB0aXZlLWljb24geG1sbnM6YW5kcm9pZD0iaHR0cDovL3NjaGVtYXMuYW5kcm9pZC5jb20vYXBrL3Jlcy9hbmRyb2lkIj48YmFja2dyb3VuZCBhbmRyb2lkOmRyYXdhYmxlPSJAZHJhd2FibGUvaWNfYXBleF9iZyIgLz48Zm9yZWdyb3VuZCBhbmRyb2lkOmRyYXdhYmxlPSJAZHJhd2FibGUvaWNfYXBleF9mZyIgLz48L2FkYXB0aXZlLWljb24+"
+os.makedirs("app/src/main/res/drawable", exist_ok=True)
+os.makedirs("app/src/main/res/mipmap-anydpi-v26", exist_ok=True)
+open("app/src/main/res/drawable/ic_apex_fg.xml", "wb").write(base64.b64decode(fg_b64))
+open("app/src/main/res/drawable/ic_apex_bg.xml", "wb").write(base64.b64decode(bg_b64))
+open("app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml", "wb").write(base64.b64decode(ad_b64))
+open("app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml", "wb").write(base64.b64decode(ad_b64))
+import subprocess
+if not os.path.exists("app/apex.jks"): subprocess.run(["keytool", "-genkey", "-v", "-keystore", "app/apex.jks", "-keyalg", "RSA", "-keysize", "2048", "-validity", "10000", "-alias", "apex", "-storepass", "apex1234", "-keypass", "apex1234", "-dname", "CN=ApexAI,O=DerekStealth,C=RU"], check=False)
+
 g_file = "app/build.gradle.kts"
 if os.path.exists(g_file) and os.path.exists("app/apex.jks"):
     g_txt = open(g_file).read()
