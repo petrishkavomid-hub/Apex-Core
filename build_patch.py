@@ -34,7 +34,7 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
 
     companion object {{
         private var cachedTextModel: String? = null
-        private var cachedVisionModel: String? = null
+        private val chatHistory = mutableListOf<Pair<String, String>>()
 
         private fun cleanSpeechText(raw: String): String {{
             return raw
@@ -45,9 +45,7 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
                 .trim()
         }}
 
-        private fun resolveGroqModel(apiKey: String, needVision: Boolean): String {{
-            if (!needVision && cachedTextModel != null) return cachedTextModel!!
-            if (needVision && cachedVisionModel != null) return cachedVisionModel!!
+        private fun fetchAllGroqModels(apiKey: String): List<String> {{
             try {{
                 val c = URL("{m_url}").openConnection() as HttpURLConnection
                 c.requestMethod = "GET"
@@ -63,19 +61,42 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
                             if (id.isNotEmpty() && !id.contains("whisper") && !id.contains("guard") && !id.contains("tts")) ids.add(id)
                         }}
                     }}
-                    if (needVision) {{
-                        val v = ids.firstOrNull {{ it.contains("vision", true) || it.contains("llava", true) || it.contains("scout", true) || it.contains("maverick", true) }}
-                        if (v != null) {{ cachedVisionModel = v; return v }}
-                    }} else {{
-                        for (tag in listOf("llama-3.3-70b", "70b", "qwen", "32b", "8b", "gemma")) {{
-                            val hit = ids.firstOrNull {{ it.contains(tag, true) && !it.contains("vision", true) }}
-                            if (hit != null) {{ cachedTextModel = hit; return hit }}
-                        }}
-                        if (ids.isNotEmpty()) {{ cachedTextModel = ids.first(); return ids.first() }}
-                    }}
+                    return ids
                 }}
             }} catch (_: Exception) {{}}
-            return if (needVision) "llama-3.2-11b-vision-preview" else "llama-3.3-70b-versatile"
+            return emptyList()
+        }}
+
+        private fun resolveTextModel(apiKey: String): String {{
+            if (cachedTextModel != null) return cachedTextModel!!
+            val ids = fetchAllGroqModels(apiKey)
+            for (tag in listOf("llama-3.3-70b", "70b", "qwen", "32b", "8b", "gemma")) {{
+                val hit = ids.firstOrNull {{ it.contains(tag, true) }}
+                if (hit != null) {{ cachedTextModel = hit; return hit }}
+            }}
+            if (ids.isNotEmpty()) {{ cachedTextModel = ids.first(); return ids.first() }}
+            return "llama-3.3-70b-versatile"
+        }}
+
+        private fun sendGroqRequest(apiKey: String, modelName: String, messages: JSONArray): Pair<Int, String> {{
+            val conn = URL("{u}").openConnection() as HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.setRequestProperty("Authorization", "Bearer $apiKey")
+            conn.setRequestProperty("Content-Type", "application/json")
+            conn.connectTimeout = 20000
+            conn.readTimeout = 30000
+            conn.doOutput = true
+            val body = JSONObject().apply {{
+                put("model", modelName)
+                put("messages", messages)
+                put("temperature", 0.72)
+                put("max_tokens", 4096)
+            }}
+            OutputStreamWriter(conn.outputStream).use {{ it.write(body.toString()) }}
+            val code = conn.responseCode
+            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+            val rawResp = stream?.bufferedReader()?.use {{ it.readText() }} ?: "Empty response"
+            return Pair(code, rawResp)
         }}
 
         private fun runDeviceCmd(ctx: Context, raw: String): String? {{
@@ -146,7 +167,7 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
                 }}
                 if (q.startsWith("найди ")) {{
                     val sq = q.removePrefix("найди ").trim()
-                    ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("{g_search}" + Uri.encode(sq))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                        ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("{g_search}" + Uri.encode(sq))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     return "Ищу: $sq"
                 }}
             }} catch (_: Exception) {{}}
@@ -163,47 +184,56 @@ service_part2 = rf'''
                 val prefs = ctx.getSharedPreferences("apex_prefs", Context.MODE_PRIVATE)
                 val apiKey = MainActivity.getActiveKey(prefs)
                 try {{
-                    val hasImg = imageBase64 != null
-                    val modelName = resolveGroqModel(apiKey, hasImg)
-
-                    val conn = URL("{u}").openConnection() as HttpURLConnection
-                    conn.requestMethod = "POST"
-                    conn.setRequestProperty("Authorization", "Bearer $apiKey")
-                    conn.setRequestProperty("Content-Type", "application/json")
-                    conn.connectTimeout = 20000
-                    conn.readTimeout = 30000
-                    conn.doOutput = true
-
-                    val sysPrompt = "Ты — Apex AI, умный голосовой и текстовый ассистент от Derek Stealth. Общайся спокойно, уверенно и по-человечески, без слова «сэр» и без нравоучений. На короткие фразы отвечай кратко (1-2 предложения), на сложные задачи — подробно и по шагам. Не используй звёздочки, решётки и символы разметки."
+                    val sysPrompt = "Ты — Apex AI, умный, живой и чуткий голосовой и текстовый ассистент от Derek Stealth. Ты помнишь весь ход диалога и гибко подстраиваешься под настроение и запрос собеседника: если тебе просто написали «привет» или завели лёгкий разговор — отвечай бодро, дружелюбно и развёрнуто примерно на 4–5 строк с уместными смайликами (🚀, 🔥, 💡, ✨); если человек просит поддержки, делится проблемой или тяжёлым состоянием — напиши тёплый, искренний и поддерживающий текст, предложи конкретные идеи или помощь, задай правильный вопрос; если просят решить задачу или объяснить тему — дай глубокий, чёткий и понятный разбор. Никогда не отвечай сухо в одно предложение и не используй символы разметки вроде звёздочек или решёток."
                     val messages = JSONArray()
                     messages.put(JSONObject().apply {{ put("role", "system"); put("content", sysPrompt) }})
 
-                    if (hasImg) {{
+                    synchronized(chatHistory) {{
+                        for ((role, text) in chatHistory) {{
+                            messages.put(JSONObject().apply {{ put("role", role); put("content", text) }})
+                        }}
+                    }}
+
+                    if (imageBase64 != null) {{
                         val arr = JSONArray()
-                        arr.put(JSONObject().apply {{ put("type", "text"); put("text", if (prompt.isBlank()) "Подробно опиши, что изображено на этом фото." else prompt) }})
+                        arr.put(JSONObject().apply {{ put("type", "text"); put("text", if (prompt.isBlank()) "Подробно разбери это фото." else prompt) }})
                         arr.put(JSONObject().apply {{ put("type", "image_url"); put("image_url", JSONObject().apply {{ put("url", "data:image/jpeg;base64,$imageBase64") }}) }})
                         messages.put(JSONObject().apply {{ put("role", "user"); put("content", arr) }})
+
+                        val allIds = fetchAllGroqModels(apiKey)
+                        val visionCandidates = (allIds.filter {{ it.contains("scout", true) || it.contains("maverick", true) || it.contains("vision", true) || it.contains("llama-4", true) }} + listOf("meta-llama/llama-4-scout-17b-16e-instruct", "meta-llama/llama-4-maverick-17b-128e-instruct")).distinct()
+                        var lastErr = "Нет доступных моделей с поддержкой фото на текущем API-ключе Groq."
+                        for (m in visionCandidates) {{
+                            val (code, rawResp) = sendGroqRequest(apiKey, m, messages)
+                            if (code in 200..299) {{
+                                val reply = JSONObject(rawResp).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim()
+                                synchronized(chatHistory) {{
+                                    chatHistory.add(Pair("user", "[Фото] $prompt"))
+                                    chatHistory.add(Pair("assistant", reply))
+                                    while (chatHistory.size > 60) chatHistory.removeAt(0)
+                                }}
+                                callback(reply, "HTTP $code • $m")
+                                return@thread
+                            }} else {{
+                                lastErr = "Ошибка ИИ ($code): $rawResp"
+                            }}
+                        }}
+                        callback(lastErr, "Vision Error")
                     }} else {{
                         messages.put(JSONObject().apply {{ put("role", "user"); put("content", prompt) }})
-                    }}
-
-                    val body = JSONObject().apply {{
-                        put("model", modelName)
-                        put("messages", messages)
-                        put("temperature", 0.65)
-                        put("max_tokens", 4096)
-                    }}
-                    OutputStreamWriter(conn.outputStream).use {{ it.write(body.toString()) }}
-
-                    val code = conn.responseCode
-                    val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-                    val rawResp = stream?.bufferedReader()?.use {{ it.readText() }} ?: "Empty response"
-
-                    if (code in 200..299) {{
-                        val reply = JSONObject(rawResp).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim()
-                        callback(reply, "HTTP $code • $modelName")
-                    }} else {{
-                        callback("Ошибка ИИ ($code): $rawResp", "HTTP $code")
+                        val modelName = resolveTextModel(apiKey)
+                        val (code, rawResp) = sendGroqRequest(apiKey, modelName, messages)
+                        if (code in 200..299) {{
+                            val reply = JSONObject(rawResp).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim()
+                            synchronized(chatHistory) {{
+                                chatHistory.add(Pair("user", prompt))
+                                chatHistory.add(Pair("assistant", reply))
+                                while (chatHistory.size > 60) chatHistory.removeAt(0)
+                            }}
+                            callback(reply, "HTTP $code • $modelName")
+                        }} else {{
+                            callback("Ошибка ИИ ($code): $rawResp", "HTTP $code")
+                        }}
                     }}
                 }} catch (e: Exception) {{
                     callback("Ошибка сети: ${{e.message}}", "Exception")
@@ -365,42 +395,14 @@ service_part3 = rf'''
 '''
 
 open(p, "w").write(s + service_part1 + service_part2 + service_part3)
-
-ns = base64.b64decode("aHR0cDovL3NjaGVtYXMuYW5kcm9pZC5jb20vYXBrL3Jlcy9hbmRyb2lk").decode()
-perms = [
-    "RECORD_AUDIO", "INTERNET", "CAMERA", "CALL_PHONE", "SYSTEM_ALERT_WINDOW",
-    "FOREGROUND_SERVICE", "FOREGROUND_SERVICE_MICROPHONE", "POST_NOTIFICATIONS",
-    "REQUEST_INSTALL_PACKAGES", "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS", "QUERY_ALL_PACKAGES"
-]
-p_xml = "\n".join([f'    <uses-permission android:name="android.permission.{x}" />' for x in perms])
-m_xml = f'''<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="{ns}">
-{p_xml}
-    <uses-feature android:name="android.hardware.camera" android:required="false" />
-    <uses-feature android:name="android.hardware.telephony" android:required="false" />
-    <application android:allowBackup="true" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:label="Apex AI" android:supportsRtl="true" android:theme="@style/Theme.AppCompat.NoActionBar">
-        <activity android:name=".MainActivity" android:exported="true" android:windowSoftInputMode="adjustResize">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-        <service android:name=".ApexCoreService" android:enabled="true" android:exported="false" android:foregroundServiceType="microphone" />
-        <service android:name=".ApexAccessibilityService" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" android:exported="true">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-        </service>
-    </application>
-</manifest>'''
-open("app/src/main/AndroidManifest.xml", "w").write(m_xml)
-
-os.makedirs("app/src/main/res/drawable", exist_ok=True)
-os.makedirs("app/src/main/res/mipmap-anydpi-v26", exist_ok=True)
+m_b64 = "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPG1hbmlmZXN0IHhtbG5zOmFuZHJvaWQ9Imh0dHA6Ly9zY2hlbWFzLmFuZHJvaWQuY29tL2Fway9yZXMvYW5kcm9pZCI+CiAgICA8dXNlcy1wZXJtaXNzaW9uIGFuZHJvaWQ6bmFtZT0iYW5kcm9pZC5wZXJtaXNzaW9uLlJFQ09SRF9BVURJTyIgLz4KICAgIDx1c2VzLXBlcm1pc3Npb24gYW5kcm9pZDpuYW1lPSJhbmRyb2lkLnBlcm1pc3Npb24uSU5URVJORVQiIC8+CiAgICA8dXNlcy1wZXJtaXNzaW9uIGFuZHJvaWQ6bmFtZT0iYW5kcm9pZC5wZXJtaXNzaW9uLkNBTUVSQSIgLz4KICAgIDx1c2VzLXBlcm1pc3Npb24gYW5kcm9pZDpuYW1lPSJhbmRyb2lkLnBlcm1pc3Npb24uQ0FMTF9QSE9ORSIgLz4KICAgIDx1c2VzLXBlcm1pc3Npb24gYW5kcm9pZDpuYW1lPSJhbmRyb2lkLnBlcm1pc3Npb24uU1lTVEVNX0FMRVJUX1dJTkRPVyIgLz4KICAgIDx1c2VzLXBlcm1pc3Npb24gYW5kcm9pZDpuYW1lPSJhbmRyb2lkLnBlcm1pc3Npb24uRk9SRUdST1VORF9TRVJWSUNFIiAvPgogICAgPHVzZXMtcGVybWlzc2lvbiBhbmRyb2lkOm5hbWU9ImFuZHJvaWQucGVybWlzc2lvbi5GT1JFR1JPVU5EX1NFUlZJQ0VfTUlDUk9QSE9ORSIgLz4KICAgIDx1c2VzLXBlcm1pc3Npb24gYW5kcm9pZDpuYW1lPSJhbmRyb2lkLnBlcm1pc3Npb24uUE9TVF9OT1RJRklDQVRJT05TIiAvPgogICAgPHVzZXMtcGVybWlzc2lvbiBhbmRyb2lkOm5hbWU9ImFuZHJvaWQucGVybWlzc2lvbi5SRVFVRVNUX0lOU1RBTExfUEFDS0FHRVMiIC8+CiAgICA8dXNlcy1wZXJtaXNzaW9uIGFuZHJvaWQ6bmFtZT0iYW5kcm9pZDpuYW1lPSJhbmRyb2lkLnBlcm1pc3Npb24uUkVRVUVTVF9JR05PUkVfQkFUVEVSWV9PUFRJTUlaQVRJT05TIiAvPgogICAgPHVzZXMtcGVybWlzc2lvbiBhbmRyb2lkOm5hbWU9ImFuZHJvaWQucGVybWlzc2lvbi5RVUVSWV9BTExfUEFDS0FHRVMiIC8+CiAgICA8dXNlcy1mZWF0dXJlIGFuZHJvaWQ6bmFtZT0iYW5kcm9pZC5oYXJkd2FyZS5jYW1lcmEiIGFuZHJvaWQ6cmVxdWlyZWQ9ImZhbHNlIiAvPgogICAgPHVzZXMtZmVhdHVyZSBhbmRyb2lkOm5hbWU9ImFuZHJvaWQuaGFyZHdhcmUudGVsZXBob255IiBhbmRyb2lkOnJlcXVpcmVkPSJmYWxzZSIgLz4KICAgIDxhcHBxpY2F0aW9uIGFuZHJvaWQ6YWxsb3dCYWNrdXA9InRydWUiIGFuZHJvaWQ6aWNvbj0iQG1pcG1hcC9pY19sYXVuY2hlciIgYW5kcm9pZDpyb3VuZEljb249IkBtaXBtYXAvaWNfbGF1bmNoZXJfcm91bmQiIGFuZHJvaWQ6bGFiZWw9IkFwZXggQUkiIGFuZHJvaWQ6c3VwcG9ydHNSdGw9InRydWUiIGFuZHJvaWQ6dGhlbWU9IkBzdHlsZS9UaGVtZS5BcHBDb21wYXQuTm9BY3Rpb25CYXIiPgogICAgICAgIDxhY3Rpdml0eSBhbmRyb2lkOm5hbWU9Ii5NYWluQWN0aXZpdHkiIGFuZHJvaWQ6ZXhwb3J0ZWQ9InRydWUiIGFuZHJvaWQ6d2luZG93U29mdElucHV0TW9kZT0iYWRqdXN0UmVzaXplIj4KICAgICAgICAgICAgPGludGVudC1maWx0ZXI+CiAgICAgICAgICAgICAgICA8YWN0aW9uIGFuZHJvaWQ6bmFtZT0iYW5kcm9pZC5pbnRlbnQuYWN0aW9uLk1BSU4iIC8+CiAgICAgICAgICAgICAgICA8Y2F0ZWdvcnkgYW5kcm9pZDpuYW1lPSJhbmRyb2lkLmludGVudC5jYXRlZ29yeS5MQVVOQ0hFUiIgLz4KICAgICAgICAgICAgPC9pbnRlbnQtZmlsdGVyPgogICAgICAgIDwvYWN0aXZpdHk+CiAgICAgICAgPHNlcnZpY2UgYW5kcm9pZDpuYW1lPSIuQXBleENvcmVTZXJ2aWNlIiBhbmRyb2lkOmVuYWJsZWQ9InRydWUiIGFuZHJvaWQ6ZXhwb3J0ZWQ9ImZhbHNlIiBhbmRyb2lkOmZvcmVncm91bmRTZXJ2aWNlVHlwZT0ibWljcm9waG9uZSIgLz4KICAgICAgICA8c2VydmljZSBhbmRyb2lkOm5hbWU9Ii5BcGV4QWNjZXNzaWJpbGl0eVNlcnZpY2UiIGFuZHJvaWQ6cGVybWlzc2lvbj0iYW5kcm9pZC5wZXJtaXNzaW9uLkJJTkRfQUNDRVNTSUJJTElUWV9TRVJWSUNFIiBhbmRyb2lkOmV4cG9ydGVkPSJ0cnVlIj4KICAgICAgICAgICAgPGludGVudC1maWx0ZXI+CiAgICAgICAgICAgICAgICA8YWN0aW9uIGFuZHJvaWQ6bmFtZT0iYW5kcm9pZC5hY2Nlc3NpYmlsaXR5c2VydmljZS5BY2Nlc3NpYmlsaXR5U2VydmljZSIgLz4KICAgICAgICAgICAgPC9pbnRlbnQtZmlsdGVyPgogICAgICAgIDwvc2VydmljZT4KICAgIDwvYXBwbGljYXRpb24+CjwvbWFuaWZlc3Q+"
 fg_b64 = "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPHZlY3RvciB4bWxuczphbmRyb2lkPSJodHRwOi8vc2NoZW1hcy5hbmRyb2lkLmNvbS9hcGsvcmVzL2FuZHJvaWQiIGFuZHJvaWQ6d2lkdGg9IjEwOGRwIiBhbmRyb2lkOmhlaWdodD0iMTA4ZHAiIGFuZHJvaWQ6dmlld3BvcnRXaWR0aD0iMTA4IiBhbmRyb2lkOnZpZXdwb3J0SGVpZ2h0PSIxMDgiPjxwYXRoIGFuZHJvaWQ6ZmlsbENvbG9yPSIjMDAwMDAwIiBhbmRyb2lkOnBhdGhEYXRhPSJNNDkuNSwzMiBMNTguNSwzMiBMNzMsNzUgTDY1LjIsNzUgTDYxLjgsNjQuNSBMNDcuMiw2NC41IEw0OS4yLDU4LjIgTDU5LjgsNTguMiBMNTQsNDAgTDQyLjgsNzUgTDM1LDc1IFoiIC8+PC92ZWN0b3I+"
 bg_b64 = "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPHZlY3RvciB4bWxuczphbmRyb2lkPSJodHRwOi8vc2NoZW1hcy5hbmRyb2lkLmNvbS9hcGsvcmVzL2FuZHJvaWQiIGFuZHJvaWQ6d2lkdGg9IjEwOGRwIiBhbmRyb2lkOmhlaWdodD0iMTA4ZHAiIGFuZHJvaWQ6dmlld3BvcnRXaWR0aD0iMTA4IiBhbmRyb2lkOnZpZXdwb3J0SGVpZ2h0PSIxMDgiPjxwYXRoIGFuZHJvaWQ6ZmlsbENvbG9yPSIjRkZGRkZGIiBhbmRyb2lkOnBhdGhEYXRhPSJNMCwwaDEwOHYxMDhoLTEwOHoiIC8+PC92ZWN0b3I+"
 ad_b64 = "PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0idXRmLTgiPz4KPGFkYXB0aXZlLWljb24geG1sbnM6YW5kcm9pZD0iaHR0cDovL3NjaGVtYXMuYW5kcm9pZC5jb20vYXBrL3Jlcy9hbmRyb2lkIj48YmFja2dyb3VuZCBhbmRyb2lkOmRyYXdhYmxlPSJAZHJhd2FibGUvaWNfYXBleF9iZyIgLz48Zm9yZWdyb3VuZCBhbmRyb2lkOmRyYXdhYmxlPSJAZHJhd2FibGUvaWNfYXBleF9mZyIgLz48L2FkYXB0aXZlLWljb24+"
 
+os.makedirs("app/src/main/res/drawable", exist_ok=True)
+os.makedirs("app/src/main/res/mipmap-anydpi-v26", exist_ok=True)
+open("app/src/main/AndroidManifest.xml", "wb").write(base64.b64decode(m_b64))
 open("app/src/main/res/drawable/ic_apex_fg.xml", "wb").write(base64.b64decode(fg_b64))
 open("app/src/main/res/drawable/ic_apex_bg.xml", "wb").write(base64.b64decode(bg_b64))
 open("app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml", "wb").write(base64.b64decode(ad_b64))
