@@ -13,17 +13,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Fix AI, Manifest and Exact Logo
+      - name: Fix AI URL, Remove Bot Push and Build Manifest
         run: |
           python3 -c '
-          import base64
+          import re, base64
           p = "app/src/main/java/com/apex/assistant/MainActivity.kt"
           s = open(p).read()
           s = s.replace("if (entered == CREATOR_TG_ID)", "if (entered == \"9768785\" || entered == CREATOR_TG_ID)")
           u = base64.b64decode("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL2NoYXQvY29tcGxldGlvbnM=").decode()
-          s = s.replace("b64(\"aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL2NoYXQvY29tcGxldGlvbnM=\")", f"\"{u}\"")
+          s = re.sub(r"fun groqUrl\(\): String = .*", f"fun groqUrl(): String = \"{u}\"", s)
           s = s.replace("llama-3.2-90b-vision-preview", "meta-llama/llama-4-scout-17b-16e-instruct")
           s = s.replace("put(\"max_tokens\", 1024)", "put(\"max_tokens\", 4096)")
+          s = re.sub(r"sendDirectToAdminBot\(\"📢 PUSH-РАССЫЛКА APEX AI.*?\)", "", s)
           s = s.replace("moveTo(50f, 30f)", "moveTo(49.5f, 32f); lineTo(58.5f, 32f); lineTo(73f, 75f); lineTo(65.2f, 75f); lineTo(61.8f, 64.5f); lineTo(47.2f, 64.5f); lineTo(49.2f, 58.2f); lineTo(59.8f, 58.2f); lineTo(54f, 40f); lineTo(42.8f, 75f); lineTo(35f, 75f); close(); /*")
           s = s.replace("lineTo(33f, 78f)\n                    close()", "*/")
           open(p, "w").write(s)
