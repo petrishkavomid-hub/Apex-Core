@@ -508,6 +508,7 @@ code3 = code3.replace('saveHistory(ctx)', '')
 
 
 
+
 open(p, "w").write(s + code1 + code2 + code3 + code4 + code5)
 
 ns = base64.b64decode("aHR0cDovL3NjaGVtYXMuYW5kcm9pZC5jb20vYXBrL3Jlcy9hbmRyb2lk").decode()
