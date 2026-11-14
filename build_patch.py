@@ -69,7 +69,7 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
                     }}
                 }}
             }} catch (_: Exception) {{}}
-        }}
+        
          fun saveHistory(ctx: Context) {{
             try {{
                 val arr = JSONArray()
@@ -84,7 +84,8 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
                 ctx.getSharedPreferences("apex_prefs", Context.MODE_PRIVATE).edit().putString("saved_chat_history", arr.toString()).apply()
             }} catch (_: Exception) {{}}
         }}
-'''
+     }}
+''' 
 
 code2 = rf'''
         private fun fetchModels(key: String): List<String> {{
