@@ -74,22 +74,18 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
             try {{
                 val arr = JSONArray()
                 synchronized(chatHistory) {{
-                    for ((r, t) in chatHistory) arr.put(JSONObject().put("r", r).put("t", t))
+                    for (p in chatHistory) {{
+                        val obj = JSONObject()
+                        obj.put("r", p.first as Any)
+                        obj.put("t", p.second as Any)
+                        arr.put(obj)
+                    }}
                 }}
                 ctx.getSharedPreferences("apex_prefs", Context.MODE_PRIVATE).edit().putString("saved_chat_history", arr.toString()).apply()
             }} catch (_: Exception) {{}}
         }}
-        
-        private var cachedModel: String? = null
-        private val chatHistory = mutableListOf<Pair<String, String>>()
-        private fun getPollenKey() = String(android.util.Base64.decode("{pk_b64}", android.util.Base64.DEFAULT))
-        private fun cleanSpeech(t: String) = t.replace(Regex("[*#_`~>|\\[\\]]"), "").replace(Regex("(?m)^\\s*[-•]\\s+"), "").replace(Regex("[\\uD83C-\\uDBFF\\uDC00-\\uDFFF]+"), "").replace(Regex("\\s+"), " ").trim()
-        private fun getMskTimeInfo(): String {{
-            val sdf = java.text.SimpleDateFormat("dd.MM.yyyy, HH:mm, EEEE", Locale("ru", "RU"))
-            sdf.timeZone = java.util.TimeZone.getTimeZone("Europe/Moscow")
-            return "Справочно (НИКОГДА не называй время или дату, если прямо не спросили): сейчас по Москве (МСК) " + sdf.format(java.util.Date()) + "."
-        }}
 '''
+
 code2 = rf'''
         private fun fetchModels(key: String): List<String> {{
             try {{
