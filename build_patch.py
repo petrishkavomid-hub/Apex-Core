@@ -8,7 +8,8 @@ worker_url = m_w.group(1) if m_w else ""
 
 s = s.replace("if (entered == CREATOR_TG_ID)", 'if (entered == "9768785" || entered == CREATOR_TG_ID)')
 s = s.replace('sendDirectToAdminBot("📢 PUSH-РАССЫЛКА APEX AI\\nЗаголовок: $pTitle\\nТекст: $pBody")', "")
-s = s.replace("super.onCreate(savedInstanceState)", "super.onCreate(savedInstanceState)\n        try { if (Build.VERSION.SDK_INT >= 33) requestPermissions(arrayOf(\"android.permission.POST_NOTIFICATIONS\", \"android.permission.RECORD_AUDIO\"), 101) } catch (_: Exception) {}\n        try { startService(Intent(this, ApexCoreService::class.java)) } catch (_: Exception) {}")
+s = s.replace("super.onCreate(savedInstanceState)", "super.onCreate(savedInstanceState)\n        try { if (Build.VERSION.SDK_INT >= 33) requestPermissions(arrayOf(\"android.permission.POST_NOTIFICATIONS\", \"android.permission.RECORD_AUDIO\"), 101) } catch (_: Exception) {}\n        try { startService(Intent(this, ApexCoreService::class.java)) } catch (_: Exception) {}\n        ApexCoreService.checkAppUpdateDialog(this)")
+
 s = s.replace('put("body", pBody)', 'put("body", pBody); ApexCoreService.publishGithubPush(pTitle, pBody); try { val nm = getSystemService(NotificationManager::class.java); if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) nm?.createNotificationChannel(NotificationChannel("apex_push", "Apex AI", NotificationManager.IMPORTANCE_HIGH)); val nb = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(this@MainActivity, "apex_push") else @Suppress("DEPRECATION") Notification.Builder(this@MainActivity); nm?.notify(System.currentTimeMillis().toInt(), nb.setContentTitle(pTitle.ifEmpty { "Apex AI" }).setContentText(pBody).setSmallIcon(android.R.drawable.ic_dialog_info).setAutoCancel(true).build()) } catch (_: Exception) {}')
 if "class ApexCoreService" in s:
     s = s[:s.find("class ApexCoreService")]
@@ -17,9 +18,8 @@ u = base64.b64decode("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL2NoYXQvY29tcGxldG
 m_url = base64.b64decode("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL21vZGVscw==").decode()
 g_url = base64.b64decode("aHR0cHM6Ly93d3cuZ29vZ2xlLmNvbS9zZWFyY2g/cT0=").decode()
 p_api = base64.b64decode("aHR0cHM6Ly9nZW4ucG9sbGluYXRpb25zLmFpL3YxL2NoYXQvY29tcGxldGlvbnM=").decode()
-gh_cm = base64.b64decode("aHR0cHM6Ly9hcGkuZ2l0aHViLmNvbS9yZXBvcy9wZXRyaXNoa2F2b21pZC9BcGV4LUNvcmUvY29tbWl0cy9tYWlu").decode()
-nl_apk = base64.b64decode("aHR0cHM6Ly9uaWdodGx5LmxpbmsvcGV0cmlzaGthdm9taWQvQXBleC1Db3JlL3dvcmtmbG93cy9idWlsZC9tYWluL0FwZXgtQUktVXBkYXRlLnppcA==").decode()
-pk_b64 = "c2tfRTc4V0E0V0ZBc0ZQM0VsYTJucE41ZVo0eENYaDNYeVU="
+gh_cm = base64.b64decode("aHR0cHM6Ly9hcGkuZ2l0aHViLmNvbS9yZXBvcy9wZXRyaXNoa2F2b21pZC1odWIvQXBleC1Db3JlL2NvbW1pdHMvbWFpbg==").decode()
+nl_apk = base64.b64decode("aHR0cHM6Ly9uaWdodGx5LmxpbmsvcGV0cmlzaGthdm9taWQtaHViL0FwZXgtQ29yZS93b3JrZmxvd3MvYnVpbGQvbWFpbi9BcGV4LUFJLVVwZGF0ZS56aXA=").decode()
 gh_tok_b64 = "Z2hwX2NMRFF5MDAzaVBlMDRMZmVhbElObmlCWnBSNEFBNjJzdHd1Rg=="
 push_raw = base64.b64decode("aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL3BldHJpc2hrYXZvbWlkLWh1Yi9BcGV4LUNvcmUvbWFpbi9wdXNoLmpzb24=").decode()
 push_api = base64.b64decode("aHR0cHM6Ly9hcGkuZ2l0aHViLmNvbS9yZXBvcy9wZXRyaXNoa2F2b21pZC1odWIvQXBleC1Db3JlL2NvbnRlbnRzL3B1c2guanNvbg==").decode()
@@ -41,6 +41,44 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
     private val mainHandler = Handler(Looper.getMainLooper())
 
     companion object {{
+            private var cachedModel: String? = null
+        private val chatHistory = mutableListOf<Pair<String, String>>()
+        private fun getPollenKey() = String(android.util.Base64.decode("{pk_b64}", android.util.Base64.DEFAULT))
+        private fun cleanSpeech(t: String) = t.replace(Regex("[*#_`~>|\\[\\]]"), "").replace(Regex("(?m)^\\s*[-•]\\s+"), "").replace(Regex("[\\uD83C-\\uDBFF\\uDC00-\\uDFFF]+"), "").replace(Regex("\\s+"), " ").trim()
+        private fun getMskTimeInfo(): String {{
+            val sdf = java.text.SimpleDateFormat("dd.MM.yyyy, HH:mm, EEEE", Locale("ru", "RU"))
+            sdf.timeZone = java.util.TimeZone.getTimeZone("Europe/Moscow")
+            return "Справочно (НИКОГДА не называй время или дату, если прямо не спросили): сейчас по Москве (МСК) " + sdf.format(java.util.Date()) + "."
+        }}
+        
+            private var historyLoaded = false
+        private fun loadHistory(ctx: Context) {{
+            if (historyLoaded) return
+            historyLoaded = true
+            try {{
+                val raw = ctx.getSharedPreferences("apex_prefs", Context.MODE_PRIVATE).getString("saved_chat_history", "") ?: ""
+                if (raw.isNotEmpty()) {{
+                    val arr = JSONArray(raw)
+                    synchronized(chatHistory) {{
+                        chatHistory.clear()
+                        for (i in 0 until arr.length()) {{
+                            val o = arr.getJSONObject(i)
+                            chatHistory.add(Pair(o.getString("r"), o.getString("t")))
+                        }}
+                    }}
+                }}
+            }} catch (_: Exception) {{}}
+        }}
+        private fun saveHistory(ctx: Context) {{
+            try {{
+                val arr = JSONArray()
+                synchronized(chatHistory) {{
+                    for ((r, t) in chatHistory) arr.put(JSONObject().put("r", r).put("t", t))
+                }}
+                ctx.getSharedPreferences("apex_prefs", Context.MODE_PRIVATE).edit().putString("saved_chat_history", arr.toString()).apply()
+            }} catch (_: Exception) {{}}
+        }}
+        
         private var cachedModel: String? = null
         private val chatHistory = mutableListOf<Pair<String, String>>()
         private fun getPollenKey() = String(android.util.Base64.decode("{pk_b64}", android.util.Base64.DEFAULT))
@@ -207,8 +245,40 @@ code3 = rf'''
             }}
         }}
         
-        fun queryBrainDirect(ctx: Context, prompt: String, isCreator: Boolean, imageBase64: String?, callback: (String, String) -> Unit) {{
+                fun checkAppUpdateDialog(act: android.app.Activity) {{
             thread {{
+                try {{
+                    val prefs = act.getSharedPreferences("apex_prefs", Context.MODE_PRIVATE)
+                    val gh = URL("{gh_cm}").openConnection() as HttpURLConnection
+                    gh.setRequestProperty("User-Agent", "ApexAI")
+                    gh.connectTimeout = 6000; gh.readTimeout = 6000
+                    if (gh.responseCode in 200..299) {{
+                        val sha = JSONObject(gh.inputStream.bufferedReader().use {{ it.readText() }}).optString("sha", "").take(7)
+                        val saved = prefs.getString("installed_commit_sha", "") ?: ""
+                        if (sha.isNotEmpty() && saved.isEmpty()) {{
+                            prefs.edit().putString("installed_commit_sha", sha).apply()
+                        }} else if (sha.isNotEmpty() && sha != saved) {{
+                            act.runOnUiThread {{
+                                try {{
+                                    android.app.AlertDialog.Builder(act)
+                                        .setTitle("Доступно обновление Apex AI ($sha)")
+                                        .setMessage("Вышла новая версия. Нажмите «Обновить», чтобы скачать и установить её поверх текущей без потери данных.")
+                                        .setPositiveButton("Обновить") {{ _, _ ->
+                                            prefs.edit().putString("installed_commit_sha", sha).apply()
+                                            act.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("{nl_apk}")))
+                                        }}
+                                        .setNegativeButton("Позже", null)
+                                        .show()
+                                }} catch (_: Exception) {{}}
+                            }}
+                        }}
+                    }}
+                }} catch (_: Exception) {{}}
+            }}
+        }}
+        fun queryBrainDirect(ctx: Context, prompt: String, isCreator: Boolean, imageBase64: String?, callback: (String, String) -> Unit) {{
+            thread {{    loadHistory(ctx)
+            
                 if (imageBase64 == null) {{
                     val cmd = runCmd(ctx, prompt)
                     if (cmd != null) {{ callback(cmd, "Cmd"); return@thread }}
@@ -233,7 +303,7 @@ code3 = rf'''
                             val (code, raw) = postJson("{p_api}", pKey, body)
                             if (code in 200..299) {{
                                 val rep = JSONObject(raw).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim()
-                                synchronized(chatHistory) {{ chatHistory.add(Pair("user", "[Фото] $prompt")); chatHistory.add(Pair("assistant", rep)); while (chatHistory.size > 60) chatHistory.removeAt(0) }}
+                                synchronized(chatHistory) {{ chatHistory.add(Pair("user", "[Фото] $prompt")); chatHistory.add(Pair("assistant", rep)); while (chatHistory.size > 60) chatHistory.removeAt(0) }} saveHistory(ctx)
                                 callback(rep, "Vision • $m"); return@thread
                             }} else err = "Ошибка фото ($code): $raw"
                         }}
@@ -248,7 +318,7 @@ code3 = rf'''
                         val (code, raw) = postJson("{u}", "Bearer $key", body)
                         if (code in 200..299) {{
                             val rep = JSONObject(raw).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim()
-                            synchronized(chatHistory) {{ chatHistory.add(Pair("user", prompt)); chatHistory.add(Pair("assistant", rep)); while (chatHistory.size > 60) chatHistory.removeAt(0) }}
+                            synchronized(chatHistory) {{ chatHistory.add(Pair("user", prompt)); chatHistory.add(Pair("assistant", rep)); while (chatHistory.size > 60) chatHistory.removeAt(0) }}                         saveHistory(ctx)
                             callback(rep, "HTTP $code • $cachedModel")
                         }} else callback("Ошибка ИИ ($code): $raw", "HTTP $code")
                     }}
