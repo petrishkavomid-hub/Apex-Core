@@ -403,7 +403,8 @@ code4 = rf'''
                         if (sha.isNotEmpty() && saved.isEmpty()) {{
                             prefs.edit().putString("installed_commit_sha", sha).apply()
                         }} else if (sha.isNotEmpty() && sha != saved) {{
-                            prefs.edit().putString("installed_commit_sha", sha).apply()
+                            code3 = code3.replace('saveHistory(ctx)', '')
+                            
                             showSystemNotify(9991, "Доступно обновление Apex AI ($sha)", "Нажмите, чтобы скачать свежую сборку", "{nl_apk}")
                         }}
                     }}
