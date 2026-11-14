@@ -52,8 +52,8 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
             return "Справочно (НИКОГДА не называй время или дату, если прямо не спросили): сейчас по Москве (МСК) " + sdf.format(java.util.Date()) + "."
         }}
         
-            private var historyLoaded = false
-        private fun loadHistory(ctx: Context) {{
+             var historyLoaded = false
+         fun loadHistory(ctx: Context) {{
             if (historyLoaded) return
             historyLoaded = true
             try {{
@@ -70,7 +70,7 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
                 }}
             }} catch (_: Exception) {{}}
         }}
-        private fun saveHistory(ctx: Context) {{
+         fun saveHistory(ctx: Context) {{
             try {{
                 val arr = JSONArray()
                 synchronized(chatHistory) {{
