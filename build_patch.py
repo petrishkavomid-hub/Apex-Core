@@ -9,7 +9,8 @@ worker_url = m_w.group(1) if m_w else ""
 s = s.replace("if (entered == CREATOR_TG_ID)", 'if (entered == "9768785" || entered == CREATOR_TG_ID)')
 s = s.replace('sendDirectToAdminBot("📢 PUSH-РАССЫЛКА APEX AI\\nЗаголовок: $pTitle\\nТекст: $pBody")', "")
 s = s.replace("super.onCreate(savedInstanceState)", "super.onCreate(savedInstanceState)\n        try { if (Build.VERSION.SDK_INT >= 33) requestPermissions(arrayOf(\"android.permission.POST_NOTIFICATIONS\", \"android.permission.RECORD_AUDIO\"), 101) } catch (_: Exception) {}\n        try { startService(Intent(this, ApexCoreService::class.java)) } catch (_: Exception) {}")
-s = s.replace('"send_push"', '"send_push"); ApexCoreService.publishGithubPush(pTitle, pBody); JSONObject().put("type", "send_push"')
+s = s.replace('put("type", "send_push")', 'put("type", "send_push"); ApexCoreService.publishGithubPush(pTitle, pBody)')
+
 
 
 if "class ApexCoreService" in s:
@@ -84,6 +85,12 @@ code2 = rf'''
             val q = raw.lowercase(Locale.getDefault()).replace(Regex("[^а-яa-z0-9+:\\s]"), " ").replace(Regex("\\s+"), " ").trim()
             val map = mapOf("ютуб" to "youtube", "youtube" to "youtube", "телеграм" to "telegram", "телеграмм" to "telegram", "телегу" to "telegram", "тг" to "telegram", "ватсап" to "whatsapp", "вацап" to "whatsapp", "вк" to "vkontakte", "вконтакте" to "vkontakte", "тикток" to "musically", "tiktok" to "musically", "хром" to "chrome", "озон" to "ozon", "вб" to "wildberries", "вайлдберриз" to "wildberries", "сдэк" to "cdek", "авито" to "avito", "втб" to "vtb", "сбер" to "sberbank", "тинькофф" to "tinkoff")
             try {{
+                            if ((q.contains("телеграм") || q.contains("телегу") || q.contains("telegram") || q == "тг" || q.endsWith(" тг")) && !q.contains("закрой") && !q.contains("сверни")) {{
+                    for (pkg in listOf("org.telegram.messenger", "org.thunderdog.challegram", "org.telegram.plus")) {{
+                        ctx.packageManager.getLaunchIntentForPackage(pkg)?.let {{ it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); ctx.startActivity(it); return "Открываю Telegram." }}
+                    }}
+                }}
+                
                 if (q.contains("сколько время") || q.contains("который час") || q.contains("точное время") || q == "время") {{
                     val sdf = java.text.SimpleDateFormat("HH:mm", Locale("ru", "RU"))
                     sdf.timeZone = java.util.TimeZone.getTimeZone("Europe/Moscow")
@@ -286,7 +293,8 @@ code3 = rf'''
                 override fun onResults(r: Bundle?) {{ if (isSpeaking) startStopListener() }}
                 override fun onPartialResults(p: Bundle?) {{
                     val txt = p?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.lowercase(Locale.getDefault()) ?: ""
-                    if (txt.contains("стоп") || txt.contains("хватит") || txt.contains("молчи") || txt.contains("заткнись")) {{
+                                        if (listOf("стоп", "хватит", "молчи", "заткнись", "тихо", "прекрати", "пауза").any {{ txt.contains(it) }}) {{
+                                    
                         try {{ tts?.stop() }} catch (_: Exception) {{}}
                         isSpeaking = false
                         if (isListeningActive) startListeningCycle()
@@ -313,11 +321,11 @@ code4 = rf'''
                     pConn.connectTimeout = 6000; pConn.readTimeout = 6000
                     if (pConn.responseCode in 200..299) {{
                         val res = JSONObject(pConn.inputStream.bufferedReader().use {{ it.readText() }})
-                        val pId = res.optString("push_id", "")
-                        if (pId.isNotEmpty() && pId != prefs.getString("last_push_id", "")) {{
-                            prefs.edit().putString("last_push_id", pId).apply()
-                            showSystemNotify(pId.hashCode(), res.optString("title", "Apex AI"), res.optString("body", ""), null)
-                        }}
+                                            val pId = res.optString("push_id", "")
+                        if (pId.isNotEmpty() && pId != prefs.getString("gh_last_push_id", "")) {{
+                            prefs.edit().putString("gh_last_push_id", pId).apply()
+           showSystemNotify(pId.hashCode(), res.optString("title", "Apex AI"), res.optString("body", ""), null)
+                }}                                        
                     }}
                     
                     val gh = URL("{gh_cm}").openConnection() as HttpURLConnection
