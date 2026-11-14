@@ -9,10 +9,7 @@ worker_url = m_w.group(1) if m_w else ""
 s = s.replace("if (entered == CREATOR_TG_ID)", 'if (entered == "9768785" || entered == CREATOR_TG_ID)')
 s = s.replace('sendDirectToAdminBot("📢 PUSH-РАССЫЛКА APEX AI\\nЗаголовок: $pTitle\\nТекст: $pBody")', "")
 s = s.replace("super.onCreate(savedInstanceState)", "super.onCreate(savedInstanceState)\n        try { if (Build.VERSION.SDK_INT >= 33) requestPermissions(arrayOf(\"android.permission.POST_NOTIFICATIONS\", \"android.permission.RECORD_AUDIO\"), 101) } catch (_: Exception) {}\n        try { startService(Intent(this, ApexCoreService::class.java)) } catch (_: Exception) {}")
-s = s.replace('put("type", "send_push")', 'put("type", "send_push"); ApexCoreService.publishGithubPush(pTitle, pBody)')
-
-
-
+s = s.replace('put("body", pBody)', 'put("body", pBody); ApexCoreService.publishGithubPush(pTitle, pBody); try { val nm = getSystemService(NotificationManager::class.java); if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) nm?.createNotificationChannel(NotificationChannel("apex_push", "Apex AI", NotificationManager.IMPORTANCE_HIGH)); val nb = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(this@MainActivity, "apex_push") else @Suppress("DEPRECATION") Notification.Builder(this@MainActivity); nm?.notify(System.currentTimeMillis().toInt(), nb.setContentTitle(pTitle.ifEmpty { "Apex AI" }).setContentText(pBody).setSmallIcon(android.R.drawable.ic_dialog_info).setAutoCancel(true).build()) } catch (_: Exception) {}')
 if "class ApexCoreService" in s:
     s = s[:s.find("class ApexCoreService")]
 
