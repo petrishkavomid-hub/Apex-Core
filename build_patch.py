@@ -504,7 +504,8 @@ code5 = rf'''
     override fun onDestroy() {{ isListeningActive = false; try {{ speechRecognizer?.destroy() }} catch (_: Exception) {{}}; try {{ tts?.shutdown() }} catch (_: Exception) {{}}; super.onDestroy() }}
 }}
 '''
-code3 = code3.replace('saveHistory(ctx)', '')
+code1, code2, code3, code4, code5 = [re.sub(r'.*(?:code3|saveHistory\(ctx\)).*\n?', '', x) for x in (code1, code2, code3, code4, code5)]
+
 
 
 
