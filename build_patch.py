@@ -529,14 +529,6 @@ override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {{
 }}
 '''
 
-# --- ЗАПИСЬ ФАЙЛА ---
-open(p, "w").write(code1)
 
-# --- МАНИФЕСТ (чтобы сервис работал) ---
-manifest_path = "app/src/main/AndroidManifest.xml"
-manifest = open(manifest_path).read()
-if "ApexCoreService" not in manifest:
-    manifest = manifest.replace("</application>", '    <service android:name=".ApexCoreService" android:enabled="true" android:exported="false" android:foregroundServiceType="microphone" />\n    </application>')
-    open(manifest_path, "w").write(manifest)
 
 print("✅ Файл ApexCoreService.kt успешно создан и манифест обновлен!")
