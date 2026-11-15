@@ -11,14 +11,19 @@ s = s.replace('sendDirectToAdminBot("📢 PUSH-РАССЫЛКА APEX AI\\nЗаг
 s = s.replace("super.onCreate(savedInstanceState)", "super.onCreate(savedInstanceState)\n        try { if (Build.VERSION.SDK_INT >= 33) requestPermissions(arrayOf(\"android.permission.POST_NOTIFICATIONS\", \"android.permission.RECORD_AUDIO\"), 101) } catch (_: Exception) {}\n        try { startService(Intent(this, ApexCoreService::class.java)) } catch (_: Exception) {}\n        ApexCoreService.checkAppUpdateDialog(this)")
 
 s = s.replace('put("body", pBody)', 'put("body", pBody); ApexCoreService.publishGithubPush(pTitle, pBody); try { val nm = getSystemService(NotificationManager::class.java); if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) nm?.createNotificationChannel(NotificationChannel("apex_push", "Apex AI", NotificationManager.IMPORTANCE_HIGH)); val nb = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(this@MainActivity, "apex_push") else @Suppress("DEPRECATION") Notification.Builder(this@MainActivity); nm?.notify(System.currentTimeMillis().toInt(), nb.setContentTitle(pTitle.ifEmpty { "Apex AI" }).setContentText(pBody).setSmallIcon(android.R.drawable.ic_dialog_info).setAutoCancel(true).build()) } catch (_: Exception) {}')
-
-s = "\n".join([line for line in s.split("\n") if "saveHistory" not in line])
-pos = s.rfind("}")
+# Находим, где начинается старый класс
+pos = s.find("class ApexCoreService")
 if pos != -1:
+    # Оставляем только MainActivity (всё, что до старого класса)
+    # И добавляем закрывающую скобку для MainActivity
     s = s[:pos].rstrip() + "\n}\n"
+else:
+    # Если класса нет, просто страхуемся
+    if not s.strip().endswith("}"): s += "\n}\n"
 
-u = base64.b64decode("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL2NoYXQvY29tcGxldGlvbnM=").decode()
-m_url = base64.b64decode("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL21vZGVscw==").decode()
+# Эта строчка убирает все старые вызовы saveHistory в MainActivity
+s = "\n".join([line for line in s.split("\n") if "saveHistory" not in line])
+
 g_url = base64.b64decode("aHR0cHM6Ly93d3cuZ29vZ2xlLmNvbS9zZWFyY2g/cT0=").decode()
 p_api = base64.b64decode("aHR0cHM6Ly9nZW4ucG9sbGluYXRpb25zLmFpL3YxL2NoYXQvY29tcGxldGlvbnM=").decode()
 gh_cm = base64.b64decode("aHR0cHM6Ly9hcGkuZ2l0aHViLmNvbS9yZXBvcy9wZXRyaXNoa2F2b21pZC1odWIvQXBleC1Db3JlL2NvbW1pdHMvbWFpbg==").decode()
