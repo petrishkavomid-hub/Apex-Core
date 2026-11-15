@@ -7,13 +7,14 @@ s = s.replace('put("body", pBody)', 'put("body", pBody); ApexCoreService.publish
 s = s.replace("super.onCreate(savedInstanceState)", "super.onCreate(savedInstanceState)\n        try { startService(Intent(this, ApexCoreService::class.java)) } catch (_: Exception) {}")
 s = s.replace("if (entered == CREATOR_TG_ID)", 'if (entered == "9768785" || entered == CREATOR_TG_ID)')
 
-# Находим начало старого класса
+pos = s.find("class ApexCoreService")
+if pos != -1:
+    s = s[:pos].rstrip() + "\n}\n"
 start_idx = s.find("class ApexCoreService")
 
 if start_idx != -1:
-    s = s.replace("companion object {", "companion object {\n        fun queryBrainDirect(ctx: Context, prompt: String, isCreator: Boolean, imageBase64: String?, callback: (String, String) -> Unit) {}\n        fun saveHistory(ctx: Context) {}\n        fun publishGithubPush(title: String, body: String) {}\n", 1)
-    # Оставляем всё, что было до класса (MainActivity)
-    s = s[:start_idx]
+
+    
     
     # Добавляем закрывающую скобку для MainActivity
     s += "\n}\n"
