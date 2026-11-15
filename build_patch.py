@@ -6,7 +6,11 @@ s = open(p).read()
 s = s.replace('put("body", pBody)', 'put("body", pBody); publishGithubPush(pTitle, pBody);')
 s = s.replace("super.onCreate(savedInstanceState)", "super.onCreate(savedInstanceState)\n        try { startService(Intent(this, ApexCoreService::class.java)) } catch (_: Exception) {}")
 s = s.replace("if (entered == CREATOR_TG_ID)", 'if (entered == "9768785" || entered == CREATOR_TG_ID)')
-
+8   s = s.replace("if (entered == CREATOR_TG_ID)", ...)
+9   s = s.replace("ApexCoreService.publishGithubPush", "publishGithubPush")
+10  s = s.replace("ApexCoreService.saveHistory", "saveHistory")
+11  
+12  pos = s.find("class ApexCoreService")
 pos = s.find("class ApexCoreService")
 if pos != -1:
     s = s[:pos].rstrip() + "\n}\n"
