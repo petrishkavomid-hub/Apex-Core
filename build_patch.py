@@ -12,7 +12,7 @@ if pos != -1:
     s = s[:pos].rstrip() + "\n}\n"
 
 s = s.replace("loadHistory(ctx)", "// loadHistory(ctx)")
-s = s.replace("cleanSpeech(reply)", "// cleanSpeech(reply)")
+s = s.replace("cleanSpeech(", "// cleanSpeech(")
 
 u = base64.b64decode("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL2NoYXQvY29tcGxldGlvbnM=").decode()
 m_url = base64.b64decode("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL21vZGVscw==").decode()
