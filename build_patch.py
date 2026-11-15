@@ -7,12 +7,16 @@ s = s.replace('put("body", pBody)', 'put("body", pBody); ApexCoreService.publish
 s = s.replace("super.onCreate(savedInstanceState)", "super.onCreate(savedInstanceState)\n        try { startService(Intent(this, ApexCoreService::class.java)) } catch (_: Exception) {}")
 s = s.replace("if (entered == CREATOR_TG_ID)", 'if (entered == "9768785" || entered == CREATOR_TG_ID)')
 
-pos = s.find("class ApexCoreService")
-if pos != -1:
-    s = s[:pos].rstrip() + "\n}\n"
+# Находим начало старого класса
+start_idx = s.find("class ApexCoreService")
 
-s = s.replace("cleanSpeech(", "ApexCoreService.cleanSpeech(")
-u = base64.b64decode("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL2NoYXQvY29tcGxldGlvbnM=").decode()
+if start_idx != -1:
+    s = s.replace("companion object {", "companion object {\n        fun queryBrainDirect(ctx: Context, prompt: String, isCreator: Boolean, imageBase64: String?, callback: (String, String) -> Unit) {}\n        fun saveHistory(ctx: Context) {}\n        fun publishGithubPush(title: String, body: String) {}\n", 1)
+    # Оставляем всё, что было до класса (MainActivity)
+    s = s[:start_idx]
+    
+    # Добавляем закрывающую скобку для MainActivity
+    s += "\n}\n"
 m_url = base64.b64decode("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL21vZGVscw==").decode()
 g_url = base64.b64decode("aHR0cHM6Ly93d3cuZ29vZ2xlLmNvbS9zZWFyY2g/cT0=").decode()
 p_api = base64.b64decode("aHR0cHM6Ly9nZW4ucG9sbGluYXRpb25zLmFpL3YxL2NoYXQvY29tcGxldGlvbnM=").decode()
