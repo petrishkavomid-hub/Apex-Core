@@ -9,7 +9,7 @@ s = s.replace("if (entered == CREATOR_TG_ID)", 'if (entered == "9768785" || ente
 s = s.replace("ApexCoreService.publishGithubPush", "publishGithubPush")
 s = s.replace("ApexCoreService.saveHistory", "saveHistory")
 s = s.replace("companion object {", "companion object {\n        fun publishGithubPush(title: String, body: String) {}\n        fun saveHistory(ctx: Context) {}\n", 1)
-s = s.replace("companion object {", "companion object {\n        fun saveHistory(ctx: Context) {}\n", 1)
+
 pos = s.find("class ApexCoreService")
 if pos != -1:
     s = s[:pos].rstrip() + "\n}\n"
