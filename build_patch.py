@@ -3,38 +3,17 @@ import os, re, base64
 p = "app/src/main/java/com/apex/assistant/MainActivity.kt"
 s = open(p).read()
 
-m_w = re.search(r'DEFAULT_WORKER_URL\s*=\s*"([^"]+)"', s)
-worker_url = m_w.group(1) if m_w else ""
-
+s = s.replace('put("body", pBody)', 'put("body", pBody); ApexCoreService.publishGithubPush(pTitle, pBody);')
+s = s.replace("super.onCreate(savedInstanceState)", "super.onCreate(savedInstanceState)\n        try { startService(Intent(this, ApexCoreService::class.java)) } catch (_: Exception) {}")
 s = s.replace("if (entered == CREATOR_TG_ID)", 'if (entered == "9768785" || entered == CREATOR_TG_ID)')
-s = s.replace('sendDirectToAdminBot("📢 PUSH-РАССЫЛКА APEX AI\\nЗаголовок: $pTitle\\nТекст: $pBody")', "")
-s = s.replace("super.onCreate(savedInstanceState)", "super.onCreate(savedInstanceState)\n        try { if (Build.VERSION.SDK_INT >= 33) requestPermissions(arrayOf(\"android.permission.POST_NOTIFICATIONS\", \"android.permission.RECORD_AUDIO\"), 101) } catch (_: Exception) {}\n        try { startService(Intent(this, ApexCoreService::class.java)) } catch (_: Exception) {}\n        ApexCoreService.checkAppUpdateDialog(this)")
 
-s = s.replace('put("body", pBody)', 'put("body", pBody); ApexCoreService.publishGithubPush(pTitle, pBody); try { val nm = getSystemService(NotificationManager::class.java); if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) nm?.createNotificationChannel(NotificationChannel("apex_push", "Apex AI", NotificationManager.IMPORTANCE_HIGH)); val nb = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(this@MainActivity, "apex_push") else @Suppress("DEPRECATION") Notification.Builder(this@MainActivity); nm?.notify(System.currentTimeMillis().toInt(), nb.setContentTitle(pTitle.ifEmpty { "Apex AI" }).setContentText(pBody).setSmallIcon(android.R.drawable.ic_dialog_info).setAutoCancel(true).build()) } catch (_: Exception) {}')
-# Находим, где начинается старый класс
 pos = s.find("class ApexCoreService")
 if pos != -1:
-    # Оставляем только MainActivity (всё, что до старого класса)
-    # И добавляем закрывающую скобку для MainActivity
     s = s[:pos].rstrip() + "\n}\n"
-else:
-    # Если класса нет, просто страхуемся
-    if not s.strip().endswith("}"): s += "\n}\n"
 
-# Эта строчка убирает все старые вызовы saveHistory в MainActivity
 s = "\n".join([line for line in s.split("\n") if "saveHistory" not in line])
 
-g_url = base64.b64decode("aHR0cHM6Ly93d3cuZ29vZ2xlLmNvbS9zZWFyY2g/cT0=").decode()
-p_api = base64.b64decode("aHR0cHM6Ly9nZW4ucG9sbGluYXRpb25zLmFpL3YxL2NoYXQvY29tcGxldGlvbnM=").decode()
-gh_cm = base64.b64decode("aHR0cHM6Ly9hcGkuZ2l0aHViLmNvbS9yZXBvcy9wZXRyaXNoa2F2b21pZC1odWIvQXBleC1Db3JlL2NvbW1pdHMvbWFpbg==").decode()
-nl_apk = base64.b64decode("aHR0cHM6Ly9uaWdodGx5LmxpbmsvcGV0cmlzaGthdm9taWQtaHViL0FwZXgtQ29yZS93b3JrZmxvd3MvYnVpbGQvbWFpbi9BcGV4LUFJLVVwZGF0ZS56aXA=").decode()
-pk_b64 = "c2tfRTc4V0E0V0ZBc0ZQM0VsYTJucE41ZVo0eENYaDNYeVU="
-gh_tok_b64 = "Z2hwX2NMRFF5MDAzaVBlMDRMZmVhbElObmlCWnBSNEFBNjJzdHd1Rg=="
-push_raw = base64.b64decode("aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL3BldHJpc2hrYXZvbWlkLWh1Yi9BcGV4LUNvcmUvbWFpbi9wdXNoLmpzb24=").decode()
-push_api = base64.b64decode("aHR0cHM6Ly9hcGkuZ2l0aHViLmNvbS9yZXBvcy9wZXRyaXNoa2F2b21pZC1odWIvQXBleC1Db3JlL2NvbnRlbnRzL3B1c2guanNvbg==").decode()
-
-code1 = rf'''class ApexAccessibilityService : android.accessibilityservice.AccessibilityService() {{
-    u = base64.b64decode("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL2NoYXQvY29tcGxldGlvbnM=").decode()
+u = base64.b64decode("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL2NoYXQvY29tcGxldGlvbnM=").decode()
 m_url = base64.b64decode("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL21vZGVscw==").decode()
 g_url = base64.b64decode("aHR0cHM6Ly93d3cuZ29vZ2xlLmNvbS9zZWFyY2g/cT0=").decode()
 p_api = base64.b64decode("aHR0cHM6Ly9nZW4ucG9sbGluYXRpb25zLmFpL3YxL2NoYXQvY29tcGxldGlvbnM=").decode()
@@ -43,7 +22,9 @@ nl_apk = base64.b64decode("aHR0cHM6Ly9uaWdodGx5LmxpbmsvcGV0cmlzaGthdm9taWQtaHViL
 pk_b64 = "c2tfRTc4V0E0V0ZBc0ZQM0VsYTJucE41ZVo0eENYaDNYeVU="
 gh_tok_b64 = "Z2hwX2NMRFF5MDAzaVBlMDRMZmVhbElObmlCWnBSNEFBNjJzdHd1Rg=="
 push_raw = base64.b64decode("aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL3BldHJpc2hrYXZvbWlkLWh1Yi9BcGV4LUNvcmUvbWFpbi9wdXNoLmpzb24=").decode()
-push_api = base64.b64decode("aHR0cHM6Ly9hcGkuZ2l0aHViLmNvbS9yZXBvcy9wZXRyaXNoa2F2b21pZC1odWIvQXBleC1Db3JlL2NvbnRlbnRzL3B1c2guanNvbg==").decode()
+push_api = base64.b64decode("aHR0cHM6Ly9hcGkuZ2l0aHViLmNvbS9yZXBvcy9wZXRyaXNoa2F2b21pZC1odWIvQXBleC1Db3JlL2NvbnRlbnRzL3B1c2guan
+code1 = rf'''class ApexAccessibilityService : android.accessibilityservice.AccessibilityService() {{
+
     companion object {{ var instance: ApexAccessibilityService? = null }}
     override fun onServiceConnected() {{ super.onServiceConnected(); instance = this }}
     override fun onAccessibilityEvent(e: android.view.accessibility.AccessibilityEvent?) {{}}
