@@ -12,9 +12,8 @@ if pos != -1:
     s = s[:pos].rstrip() + "\n}\n"
 start_idx = s.find("class ApexCoreService")
 s = s.replace("ApexCoreService.publishGithubPush", "publishGithubPush")
-s = s.replace("ApexCoreService.queryBrainDirect", "queryBrainDirect")
 s = s.replace("ApexCoreService.saveHistory", "saveHistory")
-if start_idx != -1:
+s = s.replace("ApexCoreService.queryBrainDirect", "queryBrainDirect")
 
     
     
