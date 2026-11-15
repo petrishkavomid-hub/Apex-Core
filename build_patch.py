@@ -7,12 +7,10 @@ s = s.replace('put("body", pBody)', 'put("body", pBody); ApexCoreService.publish
 s = s.replace("super.onCreate(savedInstanceState)", "super.onCreate(savedInstanceState)\n        try { startService(Intent(this, ApexCoreService::class.java)) } catch (_: Exception) {}")
 s = s.replace("if (entered == CREATOR_TG_ID)", 'if (entered == "9768785" || entered == CREATOR_TG_ID)')
 
-pos = s.find("ApexCoreService")
+pos = s.find("class ApexCoreService")
 if pos != -1:
     s = s[:pos].rstrip() + "\n}\n"
 
-s = s.replace("loadHistory(ctx)", "ApexCoreService.loadHistory(ctx)")
-s = s.replace("tts?.speak(cleanSpeech(reply),", "tts?.speak(ApexCoreService.cleanSpeech(reply),")
 s = s.replace("cleanSpeech(", "ApexCoreService.cleanSpeech(")
 u = base64.b64decode("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL2NoYXQvY29tcGxldGlvbnM=").decode()
 m_url = base64.b64decode("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL21vZGVscw==").decode()
