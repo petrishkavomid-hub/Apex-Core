@@ -11,9 +11,8 @@ pos = s.find("ApexCoreService")
 if pos != -1:
     s = s[:pos].rstrip() + "\n}\n"
 
-s = s.replace("loadHistory(ctx)", "// loadHistory(ctx)")
-s = s.replace("cleanSpeech(", "// cleanSpeech(")
-
+s = s.replace("loadHistory(", "ApexCoreService.loadHistory(")
+s = s.replace("cleanSpeech(", "ApexCoreService.cleanSpeech(")
 u = base64.b64decode("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL2NoYXQvY29tcGxldGlvbnM=").decode()
 m_url = base64.b64decode("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL21vZGVscw==").decode()
 g_url = base64.b64decode("aHR0cHM6Ly93d3cuZ29vZ2xlLmNvbS9zZWFyY2g/cT0=").decode()
