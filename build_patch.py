@@ -52,7 +52,7 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {
             return "Справочно: сейчас по Москве (МСК) " + sdf.format(java.util.Date()) + "."
         }
 
-        // БАГ №4 & №5: Надежная загрузка и сохранение краткосрочной памяти диалога
+        
         fun loadHistory(ctx: Context) {
             if (historyLoaded) return
             historyLoaded = true
