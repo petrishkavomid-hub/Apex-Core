@@ -85,7 +85,7 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {
                 ctx.getSharedPreferences("apex_prefs", Context.MODE_PRIVATE).edit().putString("saved_chat_history", arr.toString()).apply()
             } catch (_: Exception) {}
         }
-}        // Пуши и проверка обновлений (перенесены в companion object для корректной компиляции)
+}        
         fun publishGithubPush(title: String, body: String) {
             thread {
                 try {
