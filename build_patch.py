@@ -31,7 +31,7 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {
 
         private fun getPollenKey() = String(Base64.decode("c2tfRTc4V0E0V0ZBc0ZQM0VsYTJucE41ZVo0eENYaDNYeVU=", Base64.DEFAULT))
 
-        // БАГ №3: Полная очистка текста от эмодзи, знаков разметки и названий символов
+        
         private fun cleanSpeech(t: String): String {
             var r = t
             r = r.replace(Regex("[*#_`~>|\\\\[\\\\]]"), "")
@@ -143,7 +143,7 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {
             }
         }
 
-        // БАГ №2, №4, №5, №9: Контекст, естественная интонация и быстрый отклик
+        
         fun queryBrainDirect(ctx: Context, prompt: String, isCreator: Boolean, imageBase64: String?, callback: (String, String) -> Unit) {
             thread {
                 loadHistory(ctx)
@@ -238,7 +238,7 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {
             return Pair(code, txt)
         }
 
-        // БАГ №7: Полное управление всеми установленными приложениями + все старые системные команды
+        
         private fun runCmd(ctx: Context, raw: String): String? {
             val q = raw.lowercase(Locale.getDefault()).replace(Regex("[^а-яa-z0-9+:\\s]"), " ").replace(Regex("\\s+"), " ").trim()
             val aliases = mapOf(
@@ -307,7 +307,7 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {
                     return "Сворачиваю на рабочий стол."
                 }
 
-                // Универсальный запуск любого установленного приложения через Launcher Intent
+                // 
                 for (prefix in listOf("открой ", "запусти ", "включи ")) {
                     if (q.startsWith(prefix) || q.contains(" $prefix")) {
                         val idx = q.indexOf(prefix) + prefix.length
@@ -350,7 +350,7 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {
                     }
                 }
 
-                // Закрытие/сворачивание приложений по команде «закрой ...»
+                
                 for (prefix in listOf("закрой ", "выключи ", "останови ")) {
                     if (q.startsWith(prefix)) {
                         ApexAccessibilityService.instance?.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME)
@@ -366,8 +366,8 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {
             } catch (_: Exception) {}
             return null
         }
-    } // <--- закрывает companion object
-    // БАГ №6: Единый метод подбора и жёсткой фиксации качественного мужского голоса (в стиле Джарвиса)
+    
+
     private fun applyJarvisVoice() {
         try {
             tts?.setLanguage(Locale("ru", "RU"))
@@ -381,7 +381,7 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {
             if (jarvisVoice != null) {
                 tts?.voice = jarvisVoice
             }
-            // БАГ №10: Спокойный, размеренный темп и глубокий бархатный тембр без тараторки
+            
             tts?.setPitch(0.84f)
             tts?.setSpeechRate(0.86f)
         } catch (_: Exception) {}
@@ -475,7 +475,7 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {
         nm?.notify(id, nb.build())
     }
 
-    // БАГ №2, №6, №10: Озвучивание с интонационными паузами по предложениям и постоянным голосом Джарвиса
+    
     private fun speakClean(text: String) {
         val c = cleanSpeech(text)
         if (c.isEmpty()) {
@@ -486,7 +486,7 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {
         isSpeaking = true
         mainHandler.post {
             applyJarvisVoice()
-            // Разбиваем длинный текст на фразы по знакам препинания для естественных пауз и мгновенного прерывания
+            
             val chunks = c.split(Regex("(?<=[.!?])\\s+")).filter { it.isNotBlank() }
             if (chunks.isEmpty()) {
                 isSpeaking = false
@@ -501,12 +501,12 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {
                     tts?.playSilentUtterance(240L, TextToSpeech.QUEUE_ADD, "APEX_PAUSE_$i")
                 }
             }
-            // Запускаем перехватчик слова «Стоп» с небольшой задержкой, чтобы не поймать собственное эхо старта
+            
             mainHandler.postDelayed({ startStopListener() }, 250L)
         }
     }
 
-    // БАГ №1: Высокочувствительный перехват команды «Стоп» во время озвучивания длинных текстов
+    
     private fun startStopListener() {
         if (!isSpeaking) return
         mainHandler.post {
@@ -565,7 +565,7 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {
         }
     }
 
-    // БАГ №8: Быстрое и стабильное распознавание слова «Апекс» с первого раза
+
     private fun startListeningCycle() {
         if (!isListeningActive || isSpeaking) return
         mainHandler.post {
