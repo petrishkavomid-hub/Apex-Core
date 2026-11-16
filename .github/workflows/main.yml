@@ -13,8 +13,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Run Patch Script
-        run: python3 build_patch.py
+      
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
