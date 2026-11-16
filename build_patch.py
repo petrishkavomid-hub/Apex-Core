@@ -1,9 +1,5 @@
 import os, base64
 
-# Создаем папку, если ее нет
-os.makedirs("app/src/main/java/com/apex/assistant", exist_ok=True)
-
-# Путь для нового файла с сервисом
 p = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
 
 pk_b64 = "c2tfRTc4V0E0V0ZBc0ZQM0VsYTJucE41ZVo0eENYaDNYeVU="
@@ -17,8 +13,11 @@ g_url = base64.b64decode("aHR0cHM6Ly93d3cuZ29vZ2xlLmNvbS9zZWFyY2g/cT0=").decode(
 u = base64.b64decode("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL2NoYXQvY29tcGxldGlvbnM=").decode()
 p_api = base64.b64decode("aHR0cHM6Ly9nZW4ucG9sbGluYXRpb25zLmFpL3YxL2NoYXQvY29tcGxldGlvbnM=").decode()
 
-code1 = rf'''package com.apex.assistant
+code = rf'''package com.apex.assistant
+'''
 
+open(p, "w").write(code)
+print("Первый кусок готов")
 import android.app.*
 import android.content.*
 import android.os.*
@@ -47,6 +46,7 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
         private var cachedModel: String? = null
         private val chatHistory = mutableListOf<Pair<String, String>>()
         private fun getPollenKey() = String(Base64.decode("{pk_b64}", Base64.DEFAULT))
+        
         private fun cleanSpeech(t: String): String {{
             var r = t
             r = r.replace(Regex("[*#_`~>|\\\\[\\\\]]"), "")
@@ -59,11 +59,13 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
             r = r.replace(Regex("\\\\n{{2,}}"), "\\\\n")
             return r.trim()
         }}
+        
         private fun getMskTimeInfo(): String {{
             val sdf = java.text.SimpleDateFormat("dd.MM.yyyy, HH:mm, EEEE", Locale("ru", "RU"))
             sdf.timeZone = java.util.TimeZone.getTimeZone("Europe/Moscow")
             return "Справочно (НИКОГДА не называй время или дату, если прямо не спросили): сейчас по Москве (МСК) " + sdf.format(java.util.Date()) + "."
         }}
+        
         var historyLoaded = false
         fun loadHistory(ctx: Context) {{
             if (historyLoaded) return
@@ -82,6 +84,7 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
                 }}
             }} catch (_: Exception) {{}}
         }}
+        
         fun saveHistory(ctx: Context) {{
             try {{
                 val arr = JSONArray()
@@ -96,146 +99,146 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
                 ctx.getSharedPreferences("apex_prefs", Context.MODE_PRIVATE).edit().putString("saved_chat_history", arr.toString()).apply()
             }} catch (_: Exception) {{}}
         }}
-'''
 
-print("Кусок 1 загружен")
-fun publishGithubPush(title: String, body: String) {{
-    thread {{
-        try {{
-            val tok = String(Base64.decode("{gh_tok_b64}", Base64.DEFAULT))
-            val c1 = URL("{push_api}").openConnection() as HttpURLConnection
-            c1.setRequestProperty("Authorization", "Bearer $tok")
-            c1.setRequestProperty("User-Agent", "ApexAI")
-            val sha = if (c1.responseCode in 200..299) JSONObject(c1.inputStream.bufferedReader().use {{ it.readText() }}).optString("sha", "") else ""
-            val payload = JSONObject().put("push_id", System.currentTimeMillis().toString()).put("title", title.ifEmpty {{ "Apex AI" }}).put("body", body).toString()
-            val b64 = Base64.encodeToString(payload.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
-            val putBody = JSONObject().put("message", "push").put("content", b64)
-            if (sha.isNotEmpty()) putBody.put("sha", sha)
-            val c2 = URL("{push_api}").openConnection() as HttpURLConnection
-            c2.requestMethod = "PUT"
-            c2.setRequestProperty("Authorization", "Bearer $tok")
-            c2.setRequestProperty("Content-Type", "application/json")
-            c2.setRequestProperty("User-Agent", "ApexAI")
-            c2.doOutput = true
-            OutputStreamWriter(c2.outputStream).use {{ it.write(putBody.toString()) }}
-            c2.responseCode
-        }} catch (_: Exception) {{}}
-    }}
-}}
-
-fun checkAppUpdateDialog(act: android.app.Activity) {{
-    thread {{
-        try {{
-            val prefs = act.getSharedPreferences("apex_prefs", Context.MODE_PRIVATE)
-            val gh = URL("{gh_cm}").openConnection() as HttpURLConnection
-            gh.setRequestProperty("User-Agent", "ApexAI")
-            gh.connectTimeout = 6000; gh.readTimeout = 6000
-            if (gh.responseCode in 200..299) {{
-                val sha = JSONObject(gh.inputStream.bufferedReader().use {{ it.readText() }}).optString("sha", "").take(7)
-                val saved = prefs.getString("installed_commit_sha", "") ?: ""
-                if (sha.isNotEmpty() && saved.isEmpty()) {{
-                    prefs.edit().putString("installed_commit_sha", sha).apply()
-                }} else if (sha.isNotEmpty() && sha != saved) {{
-                    act.runOnUiThread {{
-                        try {{
-                            AlertDialog.Builder(act)
-                                .setTitle("Доступно обновление Apex AI ($sha)")
-                                .setMessage("Вышла новая версия. Нажмите «Обновить», чтобы скачать и установить её поверх текущей без потери данных.")
-                                .setPositiveButton("Обновить") {{ _, _ ->
-                                    prefs.edit().putString("installed_commit_sha", sha).apply()
-                                    act.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("{nl_apk}")))
-                                }}
-                                .setNegativeButton("Позже", null)
-                                .show()
-                        }} catch (_: Exception) {{}}
-                    }}
-                }}
+        fun publishGithubPush(title: String, body: String) {{
+            thread {{
+                try {{
+                    val tok = String(Base64.decode("{gh_tok_b64}", Base64.DEFAULT))
+                    val c1 = URL("{push_api}").openConnection() as HttpURLConnection
+                    c1.setRequestProperty("Authorization", "Bearer $tok")
+                    c1.setRequestProperty("User-Agent", "ApexAI")
+                    val sha = if (c1.responseCode in 200..299) JSONObject(c1.inputStream.bufferedReader().use {{ it.readText() }}).optString("sha", "") else ""
+                    val payload = JSONObject().put("push_id", System.currentTimeMillis().toString()).put("title", title.ifEmpty {{ "Apex AI" }}).put("body", body).toString()
+                    val b64 = Base64.encodeToString(payload.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+                    val putBody = JSONObject().put("message", "push").put("content", b64)
+                    if (sha.isNotEmpty()) putBody.put("sha", sha)
+                    val c2 = URL("{push_api}").openConnection() as HttpURLConnection
+                    c2.requestMethod = "PUT"
+                    c2.setRequestProperty("Authorization", "Bearer $tok")
+                    c2.setRequestProperty("Content-Type", "application/json")
+                    c2.setRequestProperty("User-Agent", "ApexAI")
+                    c2.doOutput = true
+                    OutputStreamWriter(c2.outputStream).use {{ it.write(putBody.toString()) }}
+                    c2.responseCode
+                }} catch (_: Exception) {{}}
             }}
-        }} catch (_: Exception) {{}}
-    }}
-}}
-  fun queryBrainDirect(ctx: Context, prompt: String, isCreator: Boolean, imageBase64: String?, callback: (String, String) -> Unit) {{
-    thread {{
-        loadHistory(ctx)
-        if (imageBase64 == null) {{
-            val cmd = runCmd(ctx, prompt)
-            if (cmd != null) {{ callback(cmd, "Cmd"); return@thread }}
         }}
-        val prefs = ctx.getSharedPreferences("apex_prefs", Context.MODE_PRIVATE)
-        val key = MainActivity.getActiveKey(prefs)
-        try {{
-            val ctxInfo = getMskTimeInfo()
-            val sys = "Ты — Apex AI, умный, живой и чуткий голосовой и текстовый ассистент от Derek Stealth. $ctxInfo Ты помнишь весь ход диалога и гибко подстраиваешься под собеседника: если тебе написали «привет» или завели лёгкий разговор — отвечай бодро, дружелюбно и развёрнуто примерно на 4–5 строк с уместными смайликами (🚀, 🔥, 💡, ✨); если человек просит поддержки или делится проблемой — напиши тёплый, искренний и поддерживающий текст, предложи конкретные идеи и помощь; сложные задачи разбирай подробно. Никогда не отвечай сухо в одно предложение и не используй символы разметки вроде звёздочек или решёток."
-            val msgs = JSONArray().put(JSONObject().put("role", "system").put("content", sys))
-            synchronized(chatHistory) {{ for ((r, t) in chatHistory) msgs.put(JSONObject().put("role", r).put("content", t)) }}
-            
-            if (imageBase64 != null) {{
-                val arr = JSONArray()
-                    .put(JSONObject().put("type", "text").put("text", if (prompt.isBlank()) "Подробно разбери это фото." else prompt))
-                    .put(JSONObject().put("type", "image_url").put("image_url", JSONObject().put("url", "data:image/jpeg;base64,$imageBase64")))
-                msgs.put(JSONObject().put("role", "user").put("content", arr))
-                val pKey = "Bearer " + getPollenKey()
-                var err = "Не удалось распознать изображение."
-                for (m in listOf("openai", "gemini", "openai-fast")) {{
-                    val body = JSONObject().put("model", m).put("messages", msgs).put("temperature", 0.6)
-                    val (code, raw) = postJson("{p_api}", pKey, body)
+
+        fun checkAppUpdateDialog(act: android.app.Activity) {{
+            thread {{
+                try {{
+                    val prefs = act.getSharedPreferences("apex_prefs", Context.MODE_PRIVATE)
+                    val gh = URL("{gh_cm}").openConnection() as HttpURLConnection
+                    gh.setRequestProperty("User-Agent", "ApexAI")
+                    gh.connectTimeout = 6000; gh.readTimeout = 6000
+                    if (gh.responseCode in 200..299) {{
+                        val sha = JSONObject(gh.inputStream.bufferedReader().use {{ it.readText() }}).optString("sha", "").take(7)
+                        val saved = prefs.getString("installed_commit_sha", "") ?: ""
+                        if (sha.isNotEmpty() && saved.isEmpty()) {{
+                            prefs.edit().putString("installed_commit_sha", sha).apply()
+                        }} else if (sha.isNotEmpty() && sha != saved) {{
+                            act.runOnUiThread {{
+                                try {{
+                                    AlertDialog.Builder(act)
+                                        .setTitle("Доступно обновление Apex AI ($sha)")
+                                        .setMessage("Вышла новая версия. Нажмите «Обновить», чтобы скачать и установить её поверх текущей без потери данных.")
+                                        .setPositiveButton("Обновить") {{ _, _ ->
+                                            prefs.edit().putString("installed_commit_sha", sha).apply()
+                                            act.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("{nl_apk}")))
+                                        }}
+                                        .setNegativeButton("Позже", null)
+                                        .show()
+                                }} catch (_: Exception) {{}}
+                            }}
+                        }}
+                    }}
+                }} catch (_: Exception) {{}}
+            }}
+        }}
+          fun queryBrainDirect(ctx: Context, prompt: String, isCreator: Boolean, imageBase64: String?, callback: (String, String) -> Unit) {{
+        thread {{
+            loadHistory(ctx)
+            if (imageBase64 == null) {{
+                val cmd = runCmd(ctx, prompt)
+                if (cmd != null) {{ callback(cmd, "Cmd"); return@thread }}
+            }}
+            val prefs = ctx.getSharedPreferences("apex_prefs", Context.MODE_PRIVATE)
+            val key = MainActivity.getActiveKey(prefs)
+            try {{
+                val ctxInfo = getMskTimeInfo()
+                val sys = "Ты — Apex AI, умный, живой и чуткий голосовой и текстовый ассистент от Derek Stealth. $ctxInfo Ты помнишь весь ход диалога и гибко подстраиваешься под собеседника: если тебе написали «привет» или завели лёгкий разговор — отвечай бодро, дружелюбно и развёрнуто примерно на 4–5 строк с уместными смайликами (🚀, 🔥, 💡, ✨); если человек просит поддержки или делится проблемой — напиши тёплый, искренний и поддерживающий текст, предложи конкретные идеи и помощь; сложные задачи разбирай подробно. Никогда не отвечай сухо в одно предложение и не используй символы разметки вроде звёздочек или решёток."
+                val msgs = JSONArray().put(JSONObject().put("role", "system").put("content", sys))
+                synchronized(chatHistory) {{ for ((r, t) in chatHistory) msgs.put(JSONObject().put("role", r).put("content", t)) }}
+                
+                if (imageBase64 != null) {{
+                    val arr = JSONArray()
+                        .put(JSONObject().put("type", "text").put("text", if (prompt.isBlank()) "Подробно разбери это фото." else prompt))
+                        .put(JSONObject().put("type", "image_url").put("image_url", JSONObject().put("url", "data:image/jpeg;base64,$imageBase64")))
+                    msgs.put(JSONObject().put("role", "user").put("content", arr))
+                    val pKey = "Bearer " + getPollenKey()
+                    var err = "Не удалось распознать изображение."
+                    for (m in listOf("openai", "gemini", "openai-fast")) {{
+                        val body = JSONObject().put("model", m).put("messages", msgs).put("temperature", 0.6)
+                        val (code, raw) = postJson("{p_api}", pKey, body)
+                        if (code in 200..299) {{
+                            val rep = JSONObject(raw).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim()
+                            synchronized(chatHistory) {{ chatHistory.add(Pair("user", "[Фото] $prompt")); chatHistory.add(Pair("assistant", rep)); while (chatHistory.size > 40) chatHistory.removeAt(0) }}
+                            saveHistory(ctx)
+                            callback(rep, "Vision • $m"); return@thread
+                        }} else err = "Ошибка фото ($code): $raw"
+                    }}
+                    callback(err, "Vision Error")
+                }} else {{
+                    msgs.put(JSONObject().put("role", "user").put("content", prompt))
+                    if (cachedModel == null) {{
+                        val saved = prefs.getString("apex_cached_model", "") ?: ""
+                        if (saved.isNotEmpty()) {{
+                            cachedModel = saved
+                        }} else {{
+                            val ids = fetchModels(key)
+                            cachedModel = listOf("llama-3.3-70b", "70b", "qwen", "32b", "8b", "gemma").firstNotNullOfOrNull {{ tag -> ids.firstOrNull {{ it.contains(tag, true) }} }} ?: ids.firstOrNull() ?: "llama-3.3-70b-versatile"
+                            try {{ prefs.edit().putString("apex_cached_model", cachedModel).apply() }} catch (_: Exception) {{}}
+                        }}
+                    }}
+                    val body = JSONObject().put("model", cachedModel!!).put("messages", msgs).put("temperature", 0.68).put("max_tokens", 500)
+                    val (code, raw) = postJson("{u}", "Bearer $key", body)
                     if (code in 200..299) {{
                         val rep = JSONObject(raw).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim()
-                        synchronized(chatHistory) {{ chatHistory.add(Pair("user", "[Фото] $prompt")); chatHistory.add(Pair("assistant", rep)); while (chatHistory.size > 40) chatHistory.removeAt(0) }} saveHistory(ctx)
-                        callback(rep, "Vision • $m"); return@thread
-                    }} else err = "Ошибка фото ($code): $raw"
+                        synchronized(chatHistory) {{ chatHistory.add(Pair("user", prompt)); chatHistory.add(Pair("assistant", rep)); while (chatHistory.size > 40) chatHistory.removeAt(0) }}
+                        saveHistory(ctx)
+                        callback(rep, "HTTP $code • $cachedModel")
+                    }} else callback("Ошибка ИИ ($code): $raw", "HTTP $code")
                 }}
-                callback(err, "Vision Error")
-            }} else {{
-                msgs.put(JSONObject().put("role", "user").put("content", prompt))
-                if (cachedModel == null) {{
-                    val saved = prefs.getString("apex_cached_model", "") ?: ""
-                    if (saved.isNotEmpty()) {{
-                        cachedModel = saved
-                    }} else {{
-                        val ids = fetchModels(key)
-                        cachedModel = listOf("llama-3.3-70b", "70b", "qwen", "32b", "8b", "gemma").firstNotNullOfOrNull {{ tag -> ids.firstOrNull {{ it.contains(tag, true) }} }} ?: ids.firstOrNull() ?: "llama-3.3-70b-versatile"
-                        try {{ prefs.edit().putString("apex_cached_model", cachedModel).apply() }} catch (_: Exception) {{}}
-                    }}
-                }}
-                val body = JSONObject().put("model", cachedModel!!).put("messages", msgs).put("temperature", 0.68).put("max_tokens", 500)
-                val (code, raw) = postJson("{u}", "Bearer $key", body)
-                if (code in 200..299) {{
-                    val rep = JSONObject(raw).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim()
-                    synchronized(chatHistory) {{ chatHistory.add(Pair("user", prompt)); chatHistory.add(Pair("assistant", rep)); while (chatHistory.size > 40) chatHistory.removeAt(0) }}
-                    saveHistory(ctx)
-                    callback(rep, "HTTP $code • $cachedModel")
-                }} else callback("Ошибка ИИ ($code): $raw", "HTTP $code")
-            }}
-        }} catch (e: Exception) {{ callback("Ошибка сети: ${{e.message}}", "Err") }}
-    }}
-}}
-
-private fun fetchModels(key: String): List<String> {{
-    try {{
-        val c = URL("{m_url}").openConnection() as HttpURLConnection
-        c.setRequestProperty("Authorization", "Bearer $key")
-        c.connectTimeout = 5000; c.readTimeout = 5000
-        if (c.responseCode in 200..299) {{
-            val arr = JSONObject(c.inputStream.bufferedReader().use {{ it.readText() }}).optJSONArray("data")
-            return (0 until (arr?.length() ?: 0)).mapNotNull {{ arr?.getJSONObject(it)?.optString("id") }}.filter {{ it.isNotEmpty() && !it.contains("whisper") && !it.contains("guard") && !it.contains("tts") }}
+            }} catch (e: Exception) {{ callback("Ошибка сети: ${{e.message}}", "Err") }}
         }}
-    }} catch (_: Exception) {{}}
-    return emptyList()
-}}
+    }}
 
-private fun postJson(urlStr: String, authHeader: String?, bodyObj: JSONObject): Pair<Int, String> {{
-    val c = URL(urlStr).openConnection() as HttpURLConnection
-    c.requestMethod = "POST"
-    if (authHeader != null) c.setRequestProperty("Authorization", authHeader)
-    c.setRequestProperty("Content-Type", "application/json")
-    c.setRequestProperty("User-Agent", "ApexAI/3.0")
-    c.connectTimeout = 12000; c.readTimeout = 20000; c.doOutput = true
-    OutputStreamWriter(c.outputStream).use {{ it.write(bodyObj.toString()) }}
-    val code = c.responseCode
-    val txt = (if (code in 200..299) c.inputStream else c.errorStream)?.bufferedReader()?.use {{ it.readText() }} ?: "Empty"
-    return Pair(code, txt)
-}}       
+    private fun fetchModels(key: String): List<String> {{
+        try {{
+            val c = URL("{m_url}").openConnection() as HttpURLConnection
+            c.setRequestProperty("Authorization", "Bearer $key")
+            c.connectTimeout = 5000; c.readTimeout = 5000
+            if (c.responseCode in 200..299) {{
+                val arr = JSONObject(c.inputStream.bufferedReader().use {{ it.readText() }}).optJSONArray("data")
+                return (0 until (arr?.length() ?: 0)).mapNotNull {{ arr?.getJSONObject(it)?.optString("id") }}.filter {{ it.isNotEmpty() && !it.contains("whisper") && !it.contains("guard") && !it.contains("tts") }}
+            }}
+        }} catch (_: Exception) {{}}
+        return emptyList()
+    }}
+
+    private fun postJson(urlStr: String, authHeader: String?, bodyObj: JSONObject): Pair<Int, String> {{
+        val c = URL(urlStr).openConnection() as HttpURLConnection
+        c.requestMethod = "POST"
+        if (authHeader != null) c.setRequestProperty("Authorization", authHeader)
+        c.setRequestProperty("Content-Type", "application/json")
+        c.setRequestProperty("User-Agent", "ApexAI/3.0")
+        c.connectTimeout = 12000; c.readTimeout = 20000; c.doOutput = true
+        OutputStreamWriter(c.outputStream).use {{ it.write(bodyObj.toString()) }}
+        val code = c.responseCode
+        val txt = (if (code in 200..299) c.inputStream else c.errorStream)?.bufferedReader()?.use {{ it.readText() }} ?: "Empty"
+        return Pair(code, txt)
+    }}
+
     private fun runCmd(ctx: Context, raw: String): String? {{
         val q = raw.lowercase(Locale.getDefault()).replace(Regex("[^а-яa-z0-9+:\\\\s]"), " ").replace(Regex("\\\\s+"), " ").trim()
         val map = mapOf(
@@ -529,6 +532,13 @@ override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {{
 }}
 '''
 
+# --- ЗАПИСЬ ФАЙЛА И МАНИФЕСТА ---
+open(p, "w").write(code)
 
+manifest_path = "app/src/main/AndroidManifest.xml"
+manifest = open(manifest_path).read()
+if "ApexCoreService" not in manifest:
+    manifest = manifest.replace("</application>", '    <service android:name=".ApexCoreService" android:enabled="true" android:exported="false" android:foregroundServiceType="microphone" />\n    </application>')
+    open(manifest_path, "w").write(manifest)
 
 print("✅ Файл ApexCoreService.kt успешно создан и манифест обновлен!")
