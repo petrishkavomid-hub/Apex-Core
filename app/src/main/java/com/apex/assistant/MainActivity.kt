@@ -53,7 +53,7 @@ class MainActivity : AppCompatActivity() {
         fun getActiveKey(prefs: SharedPreferences): String {
             val saved = prefs.getString("groq_key", "")?.trim() ?: ""
             if (saved.isNotEmpty()) return saved
-            return "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"
+            return "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"
         }
 
         fun sendDirectToAdminBot(text: String, onDone: ((Boolean) -> Unit)? = null) {
