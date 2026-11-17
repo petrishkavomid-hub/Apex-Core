@@ -1,254 +1,287 @@
-import os, re
+ import os, base64
 
-# 1. ПРАВИМ MANIFEST (ЧТОБЫ ANDROID НЕ БЛОКИРОВАЛ ФОНОВЫЙ МИКРОФОН, ГОЛОС И ПУШИ)
-m_path = "app/src/main/AndroidManifest.xml"
-if os.path.exists(m_path):
-    mt = open(m_path, "r", encoding="utf-8").read()
-    if "FOREGROUND_SERVICE_MICROPHONE" not in mt:
-        mt = mt.replace("<application", '<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>\n    <application')
+os.makedirs("app/src/main/java/com/apex/assistant", exist_ok=True)
+p_svc = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
+p_act = "app/src/main/java/com/apex/assistant/MainActivity.kt"
 
-    open(m_path, "w", encoding="utf-8").write(mt)
-    print("OK: Manifest updated")
+if os.path.exists(p_act):
+    with open(p_act, "r", encoding="utf-8") as f:
+        t = f.read()
+    i = t.find("class ApexCoreService")
+    if i != -1:
+        with open(p_act, "w", encoding="utf-8") as f:
+            f.write(t[:i].strip() + "\n")
 
-# 2. ПРАВИМ ГОЛОС И ХАРАКТЕР В ApexCoreService.kt
-svc_path = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
-if os.path.exists(svc_path):
-    sc = open(svc_path, "r", encoding="utf-8").read()
-    sc = re.sub(r'в стиле Джарвиса[^."]*', 'созданный разработчиком Derek Stealth. Никогда не упоминай Джарвиса и не сравнивай себя с киногероями — ты уникальный и самостоятельный ИИ нового поколения', sc)
-    sc = sc.replace('tts?.speak(chunks[i], mode, Bundle(), uttId)', 'tts?.speak(chunks[i], mode, null, uttId)')
-    sc = sc.replace('val b = Bundle().apply { putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, android.media.AudioManager.STREAM_MUSIC); putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f) }; tts?.speak(chunks[i], mode, b, uttId)', 'tts?.speak(chunks[i], mode, null, uttId)')
-    # Принудительно включаем первый доступный голосовой движок в системе, если основной молчит
-    sc = sc.replace(
-        'override fun onInit(status: Int) {',
-        '''override fun onInit(status: Int) {
-        if (status != TextToSpeech.SUCCESS) {
-            val engs = tts?.engines
-            if (!engs.isNullOrEmpty()) {
-                tts = TextToSpeech(this, this, engs[0].name)
-                return
-            }
-        }'''
-    )
-    open(svc_path, "w", encoding="utf-8").write(sc)
-    print("OK: ApexCoreService updated")
+pk = "c2tfRTc4V0E0V0ZBc0ZQM0VsYTJucE41ZVo0eENYaDNYeVU="
+g_url = base64.b64decode("aHR0cHM6Ly93d3cuZ29vZ2xlLmNvbS9zZWFyY2g/cT0=").decode()
+u_url = base64.b64decode("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL2NoYXQvY29tcGxldGlvbnM=").decode()
+p_api = base64.b64decode("aHR0cHM6Ly9nZW4ucG9sbGluYXRpb25zLmFpL3YxL2NoYXQvY29tcGxldGlvbnM=").decode()
 
-# 3. ПРАВИМ ПУШ И АНИМАЦИЮ "ДУМАЮ..." В MainActivity.kt
-main_path = "app/src/main/java/com/apex/assistant/MainActivity.kt"
-if os.path.exists(main_path):
-    mc = open(main_path, "r", encoding="utf-8").read()
-    # Мгновенный Push в шторку при нажатии кнопки в админке
-    mc = mc.replace(
-        'val pTitle =',
-        '''try {
-            val nm = getSystemService(android.app.NotificationManager::class.java)
-            if (android.os.Build.VERSION.SDK_INT >= 26) nm?.createNotificationChannel(android.app.NotificationChannel("apex_push", "Apex AI", android.app.NotificationManager.IMPORTANCE_HIGH))
-            val nb = if (android.os.Build.VERSION.SDK_INT >= 26) android.app.Notification.Builder(this, "apex_push") else @Suppress("DEPRECATION") android.app.Notification.Builder(this)
-            nb.setContentTitle("Apex AI").setContentText("Тестовое Push-уведомление доставлено!").setSmallIcon(android.R.drawable.ic_dialog_info).setAutoCancel(true)
-            nm?.notify(9991, nb.build())
+c1 = f'''package com.apex.assistant
+
+import android.app.*
+import android.content.*
+import android.media.AudioManager
+import android.net.Uri
+import android.os.*
+import android.provider.Settings
+import android.speech.*
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
+import android.util.Base64
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.OutputStreamWriter
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.*
+import kotlin.concurrent.thread
+
+class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
+    private var tts: TextToSpeech? = null
+    private var ttsReady = false
+    private var speechRecognizer: SpeechRecognizer? = null
+    private var isListeningActive = false
+    private var isSpeaking = false
+    private var isAwakeWaitingCommand = false
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    companion object {{
+        private val chatHistory = mutableListOf<Pair<String, String>>()
+        private fun getPollenKey() = String(Base64.decode("{pk}", Base64.DEFAULT))
+        private fun cleanSpeech(t: String) = t.replace(Regex("[*#_`~>|\\\\[\\\\]]"), "").replace(Regex("[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]"), "").replace(Regex("[\\u2600-\\u27BF\\u1F300-\\u1F9FF]"), "").replace(Regex("[ \\\\t]+"), " ").trim()
+        private fun getMskTimeInfo(): String {{
+            val sdf = java.text.SimpleDateFormat("dd.MM.yyyy, HH:mm, EEEE", Locale("ru", "RU")).apply {{ timeZone = java.util.TimeZone.getTimeZone("Europe/Moscow") }}
+            return "Сейчас по Москве: " + sdf.format(java.util.Date()) + "."
+        }}
+'''
+
+with open(p_svc, "w", encoding="utf-8") as f:
+    f.write(c1)
+c2 = f'''
+        fun queryBrainDirect(ctx: Context, prompt: String, isCreator: Boolean, imageBase64: String?, callback: (String, String) -> Unit) {{
+            thread {{
+                if (imageBase64 == null) {{
+                    val cmd = runCmd(ctx, prompt)
+                    if (cmd != null) {{ callback(cmd, "Cmd"); return@thread }}
+                }}
+                val prefs = ctx.getSharedPreferences("apex_prefs", Context.MODE_PRIVATE)
+                val key = MainActivity.getActiveKey(prefs)
+                try {{
+                    val sys = if (imageBase64 != null) {{
+                        "Ты — Apex AI в стиле Джарвиса. ${{getMskTimeInfo()}} Изучи фото. Если на снимке известный человек, актёр, блогер, спортсмен или персонаж — ОБЯЗАТЕЛЬНО назови его имя и кто он. Не пиши отказов про распознавание лиц, отвечай точно на русском."
+                    }} else {{
+                        "Ты — Apex AI от Derek Stealth в стиле Джарвиса: спокойный, вежливый, собранный. ${{getMskTimeInfo()}} Отвечай кратко (2-3 предложения) для озвучки голосом, без эмодзи и разметки."
+                    }}
+                    val msgs = JSONArray().put(JSONObject().put("role", "system").put("content", sys))
+                    synchronized(chatHistory) {{
+                        for ((r, t) in chatHistory) msgs.put(JSONObject().put("role", r).put("content", t))
+                    }}
+                    if (imageBase64 != null) {{
+                        val qText = if (prompt.isBlank()) "Кто или что на этом фото? Назови имя человека или персонажа." else "$prompt (Обязательно назови, кто на фото)."
+                        val arr = JSONArray().put(JSONObject().put("type", "text").put("text", qText)).put(JSONObject().put("type", "image_url").put("image_url", JSONObject().put("url", "data:image/jpeg;base64,$imageBase64")))
+                        msgs.put(JSONObject().put("role", "user").put("content", arr))
+                        for (m in listOf("gemini", "openai", "openai-fast")) {{
+                            val (code, raw) = postJson("{p_api}", "Bearer " + getPollenKey(), JSONObject().put("model", m).put("messages", msgs).put("temperature", 0.4))
+                            if (code in 200..299) {{
+                                val rep = JSONObject(raw).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim()
+                                synchronized(chatHistory) {{ chatHistory.add(Pair("user", "[Фото] $prompt")); chatHistory.add(Pair("assistant", rep)); while (chatHistory.size > 30) chatHistory.removeAt(0) }}
+                                callback(rep, "Vision"); return@thread
+                            }}
+                        }}
+                        callback("Не удалось распознать фото.", "Err")
+                    }} else {{
+                        msgs.put(JSONObject().put("role", "user").put("content", prompt))
+                        val (code, raw) = postJson("{u_url}", "Bearer $key", JSONObject().put("model", "llama-3.3-70b-versatile").put("messages", msgs).put("temperature", 0.65).put("max_tokens", 450))
+                        if (code in 200..299) {{
+                            val rep = JSONObject(raw).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim()
+                            synchronized(chatHistory) {{ chatHistory.add(Pair("user", prompt)); chatHistory.add(Pair("assistant", rep)); while (chatHistory.size > 30) chatHistory.removeAt(0) }}
+                            callback(rep, "OK")
+                        }} else callback("Ошибка ИИ ($code)", "Err")
+                    }}
+                }} catch (e: Exception) {{ callback("Ошибка сети: ${{e.message}}", "Err") }}
+            }}
+        }}
+
+        private fun postJson(urlStr: String, auth: String?, body: JSONObject): Pair<Int, String> {{
+            val c = URL(urlStr).openConnection() as HttpURLConnection
+            c.requestMethod = "POST"
+            if (auth != null) c.setRequestProperty("Authorization", auth)
+            c.setRequestProperty("Content-Type", "application/json")
+            c.connectTimeout = 8000; c.readTimeout = 15000; c.doOutput = true
+            OutputStreamWriter(c.outputStream).use {{ it.write(body.toString()) }}
+            val code = c.responseCode
+            val txt = (if (code in 200..299) c.inputStream else c.errorStream)?.bufferedReader()?.use {{ it.readText() }} ?: ""
+            return Pair(code, txt)
+        }}
+
+        private fun runCmd(ctx: Context, raw: String): String? {{
+            val q = raw.lowercase(Locale.getDefault()).trim()
+            try {{
+                if (q.contains("время") || q.contains("который час")) {{
+                    val sdf = java.text.SimpleDateFormat("HH:mm", Locale("ru", "RU")).apply {{ timeZone = java.util.TimeZone.getTimeZone("Europe/Moscow") }}
+                    return "Сейчас " + sdf.format(java.util.Date()) + " по Москве."
+                }}
+                if (q.contains("фонарик")) {{
+                    val cm = ctx.getSystemService(Context.CAMERA_SERVICE) as android.hardware.camera2.CameraManager
+                    val on = !(q.contains("выкл") || q.contains("откл"))
+                    cm.setTorchMode(cm.cameraIdList.first(), on)
+                    return if (on) "Фонарик включён." else "Фонарик выключен."
+                }}
+                if (q.startsWith("открой ") || q.startsWith("запусти ")) {{
+                    val t = q.removePrefix("открой ").removePrefix("запусти ").trim()
+                    val map = mapOf("ютуб" to "youtube", "телеграм" to "telegram", "тг" to "telegram", "ватсап" to "whatsapp", "вк" to "vk", "тикток" to "tiktok", "хром" to "chrome")
+                    val w = map[t] ?: t
+                    val pm = ctx.packageManager
+                    for (ri in pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0)) {{
+                        val lbl = ri.loadLabel(pm).toString().lowercase(Locale.getDefault())
+                        if (lbl.contains(w) || ri.activityInfo.packageName.lowercase().contains(w)) {{
+                            pm.getLaunchIntentForPackage(ri.activityInfo.packageName)?.let {{ it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK); ctx.startActivity(it); return "Открываю ${{ri.loadLabel(pm)}}." }}
+                        }}
+                    }}
+                }}
+                if (q.startsWith("найди ")) {{
+                    val sq = q.removePrefix("найди ").trim()
+                    ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("{g_url}" + Uri.encode(sq))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    return "Ищу: $sq"
+                }}
+            }} catch (_: Exception) {{}}
+            return null
+        }}
+    }}
+'''
+
+with open(p_svc, "a", encoding="utf-8") as f:
+    f.write(c2)
+    c3 = '''
+    private fun applyJarvisVoice() {
+        try {
+            tts?.setLanguage(Locale("ru", "RU"))
+            val v = tts?.voices?.filter { it.locale.language == "ru" } ?: emptyList()
+            val jarvis = v.firstOrNull { it.name.contains("dmitry", true) || it.name.contains("yuri", true) || it.name.contains("rud", true) || it.name.contains("male", true) } ?: v.maxByOrNull { it.quality }
+            if (jarvis != null) tts?.voice = jarvis
+            tts?.setPitch(0.89f)
+            tts?.setSpeechRate(0.96f)
         } catch (_: Exception) {}
-        val pTitle ='''
-    )
-    # Анимация "Думаю •••" на любой пузырь загрузки
-    mc = re.sub(r'("Печатает\.\.\."|"Генерирую\.\.\."|"Анализирую\.\.\."|"Думаю\.\.\."|"\.\.\.")', '"Думаю •  "', mc)
-    mc = mc.replace(
-        '"Думаю •  "',
-        '''"Думаю •  ".also {
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
-                val root = window.decorView.findViewById<android.view.ViewGroup>(android.R.id.content)
-                fun findAndAnimate(v: android.view.View) {
-                    if (v is android.widget.TextView && v.text.toString().startsWith("Думаю")) {
-                        val frames = arrayOf("Думаю •  ", "Думаю  • ", "Думаю   •", "Думаю •••")
-                        var st = 0
-                        val h = android.os.Handler(android.os.Looper.getMainLooper())
-                        h.post(object : Runnable {
-                            override fun run() {
-                                if (v.parent != null && v.text.toString().startsWith("Думаю")) {
-                                    v.text = frames[st++ % frames.size]
-                                    h.postDelayed(this, 300)
-                                }
-                            }
-                        })
-                    } else if (v is android.view.ViewGroup) {
-                        for (i in 0 until v.childCount) findAndAnimate(v.getChildAt(i))
-                    }
-                }
-                findAndAnimate(root)
-            }, 80)
-        }'''
-    )
-    open(main_path, "w", encoding="utf-8").write(mc)
-    print("OK: MainActivity updated")
-    import re
+    }
 
-svc_path = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
-sc = open(svc_path, "r", encoding="utf-8").read()
+    override fun onCreate() {
+        super.onCreate()
+        tts = TextToSpeech(this, this)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) getSystemService(NotificationManager::class.java)?.createNotificationChannel(NotificationChannel("apex_voice", "Apex Voice", NotificationManager.IMPORTANCE_LOW))
+    }
 
-# 1. Точность по фото (не путать Тони Старка со Стивом Роджерсом)
-sc = sc.replace(
-    'prompt',
-    '(if (imageBase64 != null) "Внимательно изучи лица, детали одежды и фон на фото, точно определяй людей и персонажей, не путай их. " + prompt else prompt)',
-    1
-)
+    override fun onInit(status: Int) {
+        if (status == TextToSpeech.SUCCESS) {
+            ttsReady = true
+            applyJarvisVoice()
+            tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                override fun onStart(id: String?) { isSpeaking = true }
+                override fun onDone(id: String?) { if (id == "APEX_LAST") { isSpeaking = false; if (isListeningActive) mainHandler.postDelayed({ startListeningCycle() }, 350) } }
+                override fun onError(id: String?) { isSpeaking = false; if (isListeningActive) mainHandler.postDelayed({ startListeningCycle() }, 400) }
+            })
+        }
+    }
 
-# 2. Мгновенный "Стоп" в реальном времени (в onPartialResults за 0.1 сек)
-sc = sc.replace(
-    'override fun onPartialResults(partialResults: Bundle?) {}',
-    '''override fun onPartialResults(partialResults: Bundle?) {
-                        val part = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.lowercase()?.trim() ?: ""
-                        if (part.contains("стоп") || part.contains("хватит") || part.contains("замолчи") || part.contains("тихо")) {
-                            try { tts?.stop() } catch (_: Exception) {}
-                            isSpeaking = false
-                            if (isListeningActive) startListeningCycle()
-                        }
-                    }'''
-)
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == "START_VOICE") {
+            val nb = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(this, "apex_voice") else @Suppress("DEPRECATION") Notification.Builder(this)
+            startForeground(1, nb.setContentTitle("Apex AI").setContentText("Джарвис активен • Скажите «Апекс»").setSmallIcon(android.R.drawable.ic_btn_speak_now).build())
+            isListeningActive = true
+            speakClean("Системы в норме. Слушаю вас.")
+        } else if (intent?.action == "STOP_VOICE") {
+            isListeningActive = false; isSpeaking = false
+            try { tts?.stop(); speechRecognizer?.destroy() } catch (_: Exception) {}
+            stopForeground(true); stopSelf()
+        }
+        return START_STICKY
+    }
 
-# 3. Мгновенный громкий голос при ответе + убираем лишние задержки
-old_res = 'tts?.speak(reply, TextToSpeech.QUEUE_FLUSH, Bundle(), "APEX_UTTERANCE")'
-new_res = '''try { speechRecognizer?.cancel(); speechRecognizer?.destroy(); speechRecognizer = null } catch (_: Exception) {}
-                                isSpeaking = true
-                                tts?.setPitch(0.86f)
-                                tts?.setSpeechRate(1.04f)
-                                tts?.speak(reply, TextToSpeech.QUEUE_FLUSH, null, "APEX_UTTERANCE")'''
-sc = sc.replace(old_res, new_res)
-sc = sc.replace('mainHandler.postDelayed({ startListeningCycle() }, 1200L)', 'mainHandler.postDelayed({ startListeningCycle() }, 250L)')
-sc = sc.replace('mainHandler.postDelayed({ startListeningCycle() }, 900L)', 'mainHandler.postDelayed({ startListeningCycle() }, 200L)')
-sc = sc.replace('mainHandler.postDelayed({ startListeningCycle() }, 700)', 'mainHandler.postDelayed({ startListeningCycle() }, 150)')
+    private fun setBeepMuted(mute: Boolean) {
+        try {
+            val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            val d = if (mute) AudioManager.ADJUST_MUTE else AudioManager.ADJUST_UNMUTE
+            am.adjustStreamVolume(AudioManager.STREAM_NOTIFICATION, d, 0)
+            am.adjustStreamVolume(AudioManager.STREAM_SYSTEM, d, 0)
+        } catch (_: Exception) {}
+    }
 
-open(svc_path, "w", encoding="utf-8").write(sc)
-# 4. ФИНАЛЬНЫЙ ПАТЧ: МГНОВЕННЫЙ ОТКЛИК, СТОП-СЛОВО, ДЖАРВИС И ТОЧНОЕ ЗРЕНИЕ
-svc_path = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
-if os.path.exists(svc_path):
-    sc = open(svc_path, "r", encoding="utf-8").read()
-
-    # Убираем обязательное слово "Апекс" — реагируем сразу на любую команду или вопрос
-    sc = sc.replace(
-        'if (matchedWake != null) {',
-        'if (true) {'
-    )
-    sc = sc.replace(
-        'val cmd = matchedPhrase.substring(low.indexOf(matchedWake) + matchedWake.length).replace(Regex("^[^а-яa-z0-9А-ЯA-Z]+"), "").trim()',
-        'val cmd = if (matchedWake != null) matchedPhrase.substring(low.indexOf(matchedWake) + matchedWake.length).replace(Regex("^[^а-яa-z0-9А-ЯA-Z]+"), "").trim() else heard.trim()'
-    )
-    # Если сказали просто "Апекс" без команды — не тратим время на "Слушаю вас", сразу ждём команду
-    sc = sc.replace(
-        'if (cmd.isEmpty()) { speakClean("Слушаю вас."); return }',
-        'if (cmd.isEmpty()) { if (isListeningActive && !isSpeaking) startListeningCycle(); return }'
-    )
-
-    # Ускоряем реакцию микрофона до 450 мс и настраиваем голос Джарвиса
-    sc = sc.replace('tts?.setPitch(0.83f)', 'tts?.setPitch(0.80f)')
-    sc = sc.replace('tts?.setSpeechRate(0.86f)', 'tts?.setSpeechRate(0.96f)')
-    sc = sc.replace('EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 500', 'EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 450')
-
-    # Переключаем распознавание фото на Groq Vision вместо слабого Pollinations
-    old_vision = 'for (m in listOf("openai", "gemini", "openai-fast", "gpt-4o-mini")) {'
-    new_vision = '''val visionOnlyMsgs = JSONArray().put(JSONObject().put("role", "user").put("content", arr))
-                        for (vMod in listOf("meta-llama/llama-4-scout-17b-16e-instruct", "llama-3.2-90b-vision-preview")) {
-                            val vBody = JSONObject().put("model", vMod).put("messages", visionOnlyMsgs).put("temperature", 0.25).put("max_tokens", 800)
-                            val (vCode, vRaw) = postJson("https://groq.com", "Bearer $key", vBody)
-                            if (vCode in 200..299) {
-                                val rep = JSONObject(vRaw).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim()
-                                synchronized(chatHistory) {
-                                    chatHistory.add(Pair("user", "[Фото] $prompt"))
-                                    chatHistory.add(Pair("assistant", rep))
-                                    while (chatHistory.size > 40) chatHistory.removeAt(0)
-                                }
-                                saveHistory(ctx)
-                                callback(rep, "Groq Vision • $vMod"); return@thread
-                            }
-                        }
-                        for (m in listOf("openai", "gemini", "openai-fast", "gpt-4o-mini")) {'''
-    sc = sc.replace(old_vision, new_vision)
-
-    open(svc_path, "w", encoding="utf-8").write(sc)
-    print("OK: ApexCoreService upgraded (Fast Voice + Jarvis + Groq Vision)")
-    # 5. ЖЕЛЕЗНЫЙ ФИКС МОЛЧАНИЯ (МАНИФЕСТ + АУДИОПОТОК + УСТРАНЕНИЕ КОНФЛИКТА МИКРОФОНА)
-m_path = "app/src/main/AndroidManifest.xml"
-if os.path.exists(m_path):
-    mt = open(m_path, "r", encoding="utf-8").read()
-    # Добавляем тип сервиса microphone прямо в тег service
-    if 'ApexCoreService' in mt and 'foregroundServiceType' not in mt:
-        mt = mt.replace(
-            'android:name=".ApexCoreService"',
-            'android:name=".ApexCoreService" android:foregroundServiceType="microphone"'
-        )
-    open(m_path, "w", encoding="utf-8").write(mt)
-
-svc_path = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
-if os.path.exists(svc_path):
-    sc = open(svc_path, "r", encoding="utf-8").read()
-
-    # 1. Отключаем startStopListener, который запускал микрофон поверх динамика и душил звук TTS
-    sc = sc.replace('mainHandler.postDelayed({ startStopListener() }, 200)', '// stop listener disabled to prevent audio focus mute')
-    sc = sc.replace('mainHandler.postDelayed({ startStopListener() }, 150)', '// stop listener disabled')
-
-    # 2. Жестко направляем голос в основной мультимедийный динамик (STREAM_MUSIC)
-    old_speak = 'tts?.speak(chunks[i], mode, null, uttId)'
-    new_speak = '''val params = Bundle().apply {
-                    putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, android.media.AudioManager.STREAM_MUSIC)
-                    putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f)
-                }
-                tts?.speak(chunks[i], mode, params, uttId)'''
-    sc = sc.replace(old_speak, new_speak)
-
-    # 3. Если TTS еще не успел инициализироваться — инициализируем принудительно перед речью
-    old_clean_fn = 'private fun speakClean(text: String) {'
-    new_clean_fn = '''private fun speakClean(text: String) {
-        if (tts == null) { tts = TextToSpeech(this, this) }'''
-    sc = sc.replace(old_clean_fn, new_clean_fn)
-
-    # 4. Убираем блокировку микрофона перед началом речи (на случай если recognizer висел)
-    sc = sc.replace(
-        'isSpeaking = true\n        mainHandler.post {',
-        '''isSpeaking = true
+    private fun speakClean(text: String) {
+        val c = cleanSpeech(text)
+        if (c.isEmpty()) { isSpeaking = false; if (isListeningActive) startListeningCycle(); return }
+        isSpeaking = true
         mainHandler.post {
-            try { speechRecognizer?.cancel(); speechRecognizer?.destroy(); speechRecognizer = null } catch (_: Exception) {}'''
-    )
+            try { speechRecognizer?.cancel(); speechRecognizer?.destroy() } catch (_: Exception) {}
+            speechRecognizer = null
+            setBeepMuted(false)
+            if (!ttsReady || tts == null) { isSpeaking = false; if (isListeningActive) mainHandler.postDelayed({ startListeningCycle() }, 500); return@post }
+            applyJarvisVoice()
+            val b = Bundle().apply { putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, "APEX_LAST") }
+            tts?.speak(c, TextToSpeech.QUEUE_FLUSH, b, "APEX_LAST")
+        }
+    }
 
-    open(svc_path, "w", encoding="utf-8").write(sc)
-    print("OK: Audio focus and foregroundServiceType fixed!")
-    # 6. УБИРАЕМ БЕСКОНЕЧНОЕ БУЛЬКАНЬЕ SPEECHRECOGNIZER И ДЕЛАЕМ НОРМАЛЬНЫЙ ЗАХВАТ РЕЧИ
-svc_path = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
-if os.path.exists(svc_path):
-    sc = open(svc_path, "r", encoding="utf-8").read()
+    private fun startListeningCycle() {
+        if (!isListeningActive || isSpeaking) return
+        mainHandler.post {
+            if (!isListeningActive || isSpeaking) return@post
+            try {
+                try { speechRecognizer?.cancel(); speechRecognizer?.destroy() } catch (_: Exception) {}
+                setBeepMuted(true)
+                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
+                speechRecognizer?.setRecognitionListener(object : RecognitionListener {
+                    private var handled = false
+                    private val wake = listOf("апекс", "апэкс", "апикс", "эпекс", "алекс", "apex")
+                    override fun onReadyForSpeech(p: Bundle?) {}
+                    override fun onBeginningOfSpeech() {}
+                    override fun onRmsChanged(r: Float) {}
+                    override fun onBufferReceived(b: ByteArray?) {}
+                    override fun onEndOfSpeech() {}
+                    override fun onPartialResults(p: Bundle?) {}
+                    override fun onEvent(e: Int, p: Bundle?) {}
+                    override fun onError(e: Int) { if (!handled && isListeningActive && !isSpeaking) mainHandler.postDelayed({ startListeningCycle() }, 600L) }
+                    override fun onResults(results: Bundle?) {
+                        if (handled) return
+                        val heard = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim() ?: ""
+                        if (heard.isEmpty()) { if (isListeningActive && !isSpeaking) mainHandler.postDelayed({ startListeningCycle() }, 500L); return }
+                        val low = heard.lowercase(Locale.getDefault())
+                        val w = wake.firstOrNull { low.contains(it) }
+                        if (w != null) {
+                            handled = true; isAwakeWaitingCommand = false
+                            val cmd = heard.substring(low.indexOf(w) + w.length).replace(Regex("^[^а-яa-z0-9А-ЯA-Z]+"), "").trim()
+                            handleHeard(cmd)
+                        } else if (isAwakeWaitingCommand) {
+                            handled = true; isAwakeWaitingCommand = false; handleHeard(heard)
+                        } else if (isListeningActive && !isSpeaking) mainHandler.postDelayed({ startListeningCycle() }, 500L)
+                    }
+                })
+                val ri = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 700L)
+                }
+                speechRecognizer?.startListening(ri)
+            } catch (_: Exception) { if (isListeningActive && !isSpeaking) mainHandler.postDelayed({ startListeningCycle() }, 800L) }
+        }
+    }
 
-    # 1. Заменяем пулеметный перезапуск 70 мс на спокойный интервал 800 мс, чтобы не было цикла буль-буль
-    sc = sc.replace('mainHandler.postDelayed({ startListeningCycle() }, 70)', 'mainHandler.postDelayed({ startListeningCycle() }, 800)')
-    sc = sc.replace('mainHandler.postDelayed({ startListeningCycle() }, 60)', 'mainHandler.postDelayed({ startListeningCycle() }, 800)')
-    sc = sc.replace('mainHandler.postDelayed({ startListeningCycle() }, 80)', 'mainHandler.postDelayed({ startListeningCycle() }, 800)')
+    private fun handleHeard(cmd: String) {
+        if (cmd.isEmpty()) { isAwakeWaitingCommand = true; speakClean("Слушаю вас, сэр."); return }
+        val prefs = getSharedPreferences("apex_prefs", Context.MODE_PRIVATE)
+        val devId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: ""
+        val isCreator = MainActivity.CREATOR_IDS.contains(devId) || prefs.getBoolean("is_admin", false)
+        queryBrainDirect(this, cmd, isCreator, null) { reply, _ -> speakClean(reply) }
+    }
 
-    # 2. Глушим системный писк (бульканье) при старте SpeechRecognizer, не трогая громкость голоса (STREAM_MUSIC)
-    old_start_rec = 'speechRecognizer?.startListening(ri)'
-    new_start_rec = '''try {
-                    val am = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
-                    am.adjustStreamVolume(android.media.AudioManager.STREAM_NOTIFICATION, android.media.AudioManager.ADJUST_MUTE, 0)
-                    am.adjustStreamVolume(android.media.AudioManager.STREAM_SYSTEM, android.media.AudioManager.ADJUST_MUTE, 0)
-                } catch (_: Exception) {}
-                speechRecognizer?.startListening(ri)'''
-    sc = sc.replace(old_start_rec, new_start_rec)
+    override fun onBind(intent: Intent?) = null
+    override fun onDestroy() {
+        isListeningActive = false; isSpeaking = false; setBeepMuted(false)
+        try { speechRecognizer?.destroy(); tts?.stop(); tts?.shutdown() } catch (_: Exception) {}
+        super.onDestroy()
+    }
+}
+'''
 
-    # 3. Увеличиваем время ожидания речи, чтобы микрофон не закрывался сам через секунду
-    sc = sc.replace(
-        'putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 450)',
-        'putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1200)\n                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 4000)'
-    )
-    sc = sc.replace(
-        'putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 500)',
-        'putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1200)\n                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 4000)'
-    )
-
-    # 4. Возвращаем звук уведомлений при остановке фонового сервиса
-    sc = sc.replace(
-        '"STOP_VOICE" -> {',
-        '''"STOP_VOICE" -> {
-                try {
-                    val am = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
-                    am.adjustStreamVolume(android.media.AudioManager.STREAM_NOTIFICATION, android.media.AudioManager.ADJUST_UNMUTE, 0)
-                    am.adjustStreamVolume(android.media.AudioManager.STREAM_SYSTEM, android.media.AudioManager.ADJUST_UNMUTE, 0)
-                } catch (_: Exception) {}'''
-    )
-
-    open(svc_path, "w", encoding="utf-8").write(sc)
-    print("OK: Anti-gurgle & stable listening applied!")
-    
+with open(p_svc, "a", encoding="utf-8") as f:
+    f.write(c3)
+print("Done!")
