@@ -208,4 +208,47 @@ if os.path.exists(svc_path):
 
     open(svc_path, "w", encoding="utf-8").write(sc)
     print("OK: Audio focus and foregroundServiceType fixed!")
+    # 6. УБИРАЕМ БЕСКОНЕЧНОЕ БУЛЬКАНЬЕ SPEECHRECOGNIZER И ДЕЛАЕМ НОРМАЛЬНЫЙ ЗАХВАТ РЕЧИ
+svc_path = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
+if os.path.exists(svc_path):
+    sc = open(svc_path, "r", encoding="utf-8").read()
+
+    # 1. Заменяем пулеметный перезапуск 70 мс на спокойный интервал 800 мс, чтобы не было цикла буль-буль
+    sc = sc.replace('mainHandler.postDelayed({ startListeningCycle() }, 70)', 'mainHandler.postDelayed({ startListeningCycle() }, 800)')
+    sc = sc.replace('mainHandler.postDelayed({ startListeningCycle() }, 60)', 'mainHandler.postDelayed({ startListeningCycle() }, 800)')
+    sc = sc.replace('mainHandler.postDelayed({ startListeningCycle() }, 80)', 'mainHandler.postDelayed({ startListeningCycle() }, 800)')
+
+    # 2. Глушим системный писк (бульканье) при старте SpeechRecognizer, не трогая громкость голоса (STREAM_MUSIC)
+    old_start_rec = 'speechRecognizer?.startListening(ri)'
+    new_start_rec = '''try {
+                    val am = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+                    am.adjustStreamVolume(android.media.AudioManager.STREAM_NOTIFICATION, android.media.AudioManager.ADJUST_MUTE, 0)
+                    am.adjustStreamVolume(android.media.AudioManager.STREAM_SYSTEM, android.media.AudioManager.ADJUST_MUTE, 0)
+                } catch (_: Exception) {}
+                speechRecognizer?.startListening(ri)'''
+    sc = sc.replace(old_start_rec, new_start_rec)
+
+    # 3. Увеличиваем время ожидания речи, чтобы микрофон не закрывался сам через секунду
+    sc = sc.replace(
+        'putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 450)',
+        'putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1200)\n                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 4000)'
+    )
+    sc = sc.replace(
+        'putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 500)',
+        'putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1200)\n                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 4000)'
+    )
+
+    # 4. Возвращаем звук уведомлений при остановке фонового сервиса
+    sc = sc.replace(
+        '"STOP_VOICE" -> {',
+        '''"STOP_VOICE" -> {
+                try {
+                    val am = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+                    am.adjustStreamVolume(android.media.AudioManager.STREAM_NOTIFICATION, android.media.AudioManager.ADJUST_UNMUTE, 0)
+                    am.adjustStreamVolume(android.media.AudioManager.STREAM_SYSTEM, android.media.AudioManager.ADJUST_UNMUTE, 0)
+                } catch (_: Exception) {}'''
+    )
+
+    open(svc_path, "w", encoding="utf-8").write(sc)
+    print("OK: Anti-gurgle & stable listening applied!")
     
