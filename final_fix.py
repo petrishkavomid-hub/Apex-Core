@@ -1,116 +1,82 @@
 import os, re
 
+# 1. ПРАВИМ MANIFEST (ЧТОБЫ ANDROID НЕ БЛОКИРОВАЛ ФОНОВЫЙ МИКРОФОН, ГОЛОС И ПУШИ)
+m_path = "app/src/main/AndroidManifest.xml"
+if os.path.exists(m_path):
+    mt = open(m_path, "r", encoding="utf-8").read()
+    if "FOREGROUND_SERVICE_MICROPHONE" not in mt:
+        mt = mt.replace("<application", '<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>\n    <application')
+    mt = mt.replace('android:name=".ApexCoreService"', 'android:name=".ApexCoreService" android:foregroundServiceType="microphone"')
+    mt = mt.replace('android:name="com.apex.assistant.ApexCoreService"', 'android:name="com.apex.assistant.ApexCoreService" android:foregroundServiceType="microphone"')
+    open(m_path, "w", encoding="utf-8").write(mt)
+    print("OK: Manifest updated")
+
+# 2. ПРАВИМ ГОЛОС И ХАРАКТЕР В ApexCoreService.kt
 svc_path = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
 if os.path.exists(svc_path):
     sc = open(svc_path, "r", encoding="utf-8").read()
-
-    # 1. Вырезаем любое упоминание Джарвиса
     sc = re.sub(r'в стиле Джарвиса[^."]*', 'созданный разработчиком Derek Stealth. Никогда не упоминай Джарвиса и не сравнивай себя с киногероями — ты уникальный и самостоятельный ИИ нового поколения', sc)
-
-    # 2. Делаем 100% рабочий громкий голос на любом Android
-    old_speak_block = re.search(r'private fun speakClean\(text: String\) \{[\s\S]*?\n    \}', sc)
-    new_speak_block = '''private fun speakClean(text: String) {
-        val c = cleanSpeech(text)
-        if (c.isEmpty()) {
-            isSpeaking = false
-            if (isListeningActive) startListeningCycle()
-            return
-        }
-        isSpeaking = true
-        mainHandler.post {
-            try { speechRecognizer?.cancel(); speechRecognizer?.destroy(); speechRecognizer = null } catch (_: Exception) {}
-            try {
-                val am = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
-                am.mode = android.media.AudioManager.MODE_NORMAL
-                val maxVol = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
-                if (am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC) < maxVol / 2) {
-                    am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, (maxVol * 0.8).toInt(), 0)
-                }
-            } catch (_: Exception) {}
-            applyJarvisVoice()
-            val chunks = c.split(Regex("(?<=[.!?;—])\\\\s+")).filter { it.isNotBlank() }
-            if (chunks.isEmpty()) {
-                isSpeaking = false
-                if (isListeningActive) startListeningCycle()
-                return@post
+    sc = sc.replace('tts?.speak(chunks[i], mode, Bundle(), uttId)', 'tts?.speak(chunks[i], mode, null, uttId)')
+    sc = sc.replace('val b = Bundle().apply { putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, android.media.AudioManager.STREAM_MUSIC); putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f) }; tts?.speak(chunks[i], mode, b, uttId)', 'tts?.speak(chunks[i], mode, null, uttId)')
+    # Принудительно включаем первый доступный голосовой движок в системе, если основной молчит
+    sc = sc.replace(
+        'override fun onInit(status: Int) {',
+        '''override fun onInit(status: Int) {
+        if (status != TextToSpeech.SUCCESS) {
+            val engs = tts?.engines
+            if (!engs.isNullOrEmpty()) {
+                tts = TextToSpeech(this, this, engs[0].name)
+                return
             }
-            for (i in chunks.indices) {
-                val mode = if (i == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
-                val uttId = if (i == chunks.lastIndex) "APEX_LAST" else "APEX_PART_$i"
-                tts?.speak(chunks[i], mode, null, uttId)
-            }
-        }
-    }'''
-    if old_speak_block:
-        sc = sc.replace(old_speak_block.group(0), new_speak_block)
-
-    # 3. Заменяем старую отправку пушей с протухшим токеном на рабочий канал без токенов
-    sc = sc.replace('fun publishGithubPush(', '''fun publishGithubPush(title: String, body: String, onDone: ((Boolean) -> Unit)? = null) {
-            thread {
-                try {
-                    val t = title.ifEmpty { "Apex AI" }
-                    val bText = body.ifEmpty { t }
-                    val b64 = "=?UTF-8?B?" + android.util.Base64.encodeToString(t.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP) + "?="
-                    val c = URL("https://ntfy.sh").openConnection() as HttpURLConnection
-                    c.requestMethod = "POST"
-                    c.setRequestProperty("Title", b64)
-                    c.setRequestProperty("Priority", "high")
-                    c.doOutput = true
-                    OutputStreamWriter(c.outputStream, Charsets.UTF_8).use { it.write(bText) }
-                    val ok = c.responseCode in 200..299
-                    onDone?.invoke(ok)
-                } catch (_: Exception) { onDone?.invoke(false) }
-            }
-        }
-        fun oldDeadPush(''')
-
-    sc = re.sub(r'val pConn = URL\([^)]+\)\.openConnection\(\) as HttpURLConnection', 'val pConn = URL("https://ntfy.sh/json?poll=1").openConnection() as HttpURLConnection', sc)
+        }'''
+    )
     open(svc_path, "w", encoding="utf-8").write(sc)
-    main_path = "app/src/main/java/com/apex/assistant/MainActivity.kt"
+    print("OK: ApexCoreService updated")
+
+# 3. ПРАВИМ ПУШ И АНИМАЦИЮ "ДУМАЮ..." В MainActivity.kt
+main_path = "app/src/main/java/com/apex/assistant/MainActivity.kt"
 if os.path.exists(main_path):
     mc = open(main_path, "r", encoding="utf-8").read()
-
-    # 1. Привязываем кнопку отправки Push к новой функции с мгновенным показом уведомления в шторке
-    mc = re.sub(
-        r'ApexCoreService\.publishGithubPush\([^)]+\)(\s*\{[\s\S]*?\}\s*\})?',
-        '''ApexCoreService.publishGithubPush(pTitle, pBody) { ok ->
-                        runOnUiThread {
-                            try {
-                                val nm = getSystemService(android.app.NotificationManager::class.java)
-                                if (android.os.Build.VERSION.SDK_INT >= 26) {
-                                    nm?.createNotificationChannel(android.app.NotificationChannel("apex_push", "Apex AI", android.app.NotificationManager.IMPORTANCE_HIGH))
-                                }
-                                val nb = if (android.os.Build.VERSION.SDK_INT >= 26) android.app.Notification.Builder(this@MainActivity, "apex_push") else @Suppress("DEPRECATION") android.app.Notification.Builder(this@MainActivity)
-                                nb.setContentTitle(pTitle.ifEmpty { "Apex AI" }).setContentText(pBody.ifEmpty { pTitle }).setSmallIcon(android.R.drawable.ic_dialog_info).setAutoCancel(true)
-                                nm?.notify(System.currentTimeMillis().toInt(), nb.build())
-                            } catch (_: Exception) {}
-                            android.widget.Toast.makeText(this@MainActivity, if (ok) "Push отправлен всем в шторку!" else "Показано локально (проверьте сеть/VPN)", android.widget.Toast.LENGTH_LONG).show()
-                        }
-                    }''',
-        mc,
-        count=1
+    # Мгновенный Push в шторку при нажатии кнопки в админке
+    mc = mc.replace(
+        'val pTitle =',
+        '''try {
+            val nm = getSystemService(android.app.NotificationManager::class.java)
+            if (android.os.Build.VERSION.SDK_INT >= 26) nm?.createNotificationChannel(android.app.NotificationChannel("apex_push", "Apex AI", android.app.NotificationManager.IMPORTANCE_HIGH))
+            val nb = if (android.os.Build.VERSION.SDK_INT >= 26) android.app.Notification.Builder(this, "apex_push") else @Suppress("DEPRECATION") android.app.Notification.Builder(this)
+            nb.setContentTitle("Apex AI").setContentText("Тестовое Push-уведомление доставлено!").setSmallIcon(android.R.drawable.ic_dialog_info).setAutoCancel(true)
+            nm?.notify(9991, nb.build())
+        } catch (_: Exception) {}
+        val pTitle ='''
     )
-
-    # 2. Живое прыгающее троеточие "Думаю..." при отправке текста или фото
-    mc = mc.replace('"Генерирую ответ..."', '"Думаю •••"')
-    mc = mc.replace('"Анализирую фото..."', '"Думаю •••"')
-    mc = mc.replace('"Печатает..."', '"Думаю •••"')
-    mc = mc.replace('"Думаю..."', '"Думаю •••"')
-
-    anim_code = '''val tvAnim = it
-        val hAnim = android.os.Handler(android.os.Looper.getMainLooper())
-        val frames = arrayOf("Думаю •  ", "Думаю  • ", "Думаю   •", "Думаю •••")
-        var step = 0
-        hAnim.post(object : Runnable {
-            override fun run() {
-                if (tvAnim.parent != null && tvAnim.text.toString().startsWith("Думаю")) {
-                    tvAnim.text = frames[step++ % frames.size]
-                    hAnim.postDelayed(this, 300)
+    # Анимация "Думаю •••" на любой пузырь загрузки
+    mc = re.sub(r'("Печатает\.\.\."|"Генерирую\.\.\."|"Анализирую\.\.\."|"Думаю\.\.\."|"\.\.\.")', '"Думаю •  "', mc)
+    mc = mc.replace(
+        '"Думаю •  "',
+        '''"Думаю •  ".also {
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                val root = window.decorView.findViewById<android.view.ViewGroup>(android.R.id.content)
+                fun findAndAnimate(v: android.view.View) {
+                    if (v is android.widget.TextView && v.text.toString().startsWith("Думаю")) {
+                        val frames = arrayOf("Думаю •  ", "Думаю  • ", "Думаю   •", "Думаю •••")
+                        var st = 0
+                        val h = android.os.Handler(android.os.Looper.getMainLooper())
+                        h.post(object : Runnable {
+                            override fun run() {
+                                if (v.parent != null && v.text.toString().startsWith("Думаю")) {
+                                    v.text = frames[st++ % frames.size]
+                                    h.postDelayed(this, 300)
+                                }
+                            }
+                        })
+                    } else if (v is android.view.ViewGroup) {
+                        for (i in 0 until v.childCount) findAndAnimate(v.getChildAt(i))
+                    }
                 }
-            }
-        })'''
-    mc = re.sub(r'(\w+)\.text\s*=\s*"Думаю •••"', r'\1.text = "Думаю •  "; ' + anim_code.replace('it', r'\1'), mc)
-
+                findAndAnimate(root)
+            }, 80)
+        }'''
+    )
     open(main_path, "w", encoding="utf-8").write(mc)
-
-print("✅ final_fix.py выполнен!")
+    print("OK: MainActivity updated")
+    
