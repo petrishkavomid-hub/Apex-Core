@@ -6,8 +6,7 @@ if os.path.exists(m_path):
     mt = open(m_path, "r", encoding="utf-8").read()
     if "FOREGROUND_SERVICE_MICROPHONE" not in mt:
         mt = mt.replace("<application", '<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>\n    <application')
-    mt = mt.replace('android:name=".ApexCoreService"', 'android:name=".ApexCoreService" android:foregroundServiceType="microphone"')
-    mt = mt.replace('android:name="com.apex.assistant.ApexCoreService"', 'android:name="com.apex.assistant.ApexCoreService" android:foregroundServiceType="microphone"')
+
     open(m_path, "w", encoding="utf-8").write(mt)
     print("OK: Manifest updated")
 
