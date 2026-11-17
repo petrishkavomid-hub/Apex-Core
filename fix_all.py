@@ -771,5 +771,8 @@ if os.path.exists(main_path):
         }'''
     mc = mc.replace(old_logo, new_logo)
     mc = mc.replace("import android.os.*", "import android.os.*\nimport com.apex.assistant.ApexCoreService", 1)
-    
+        with open(main_path, "w", encoding="utf-8") as f:
+        f.write(mc)
+open("app/src/main/java/com/apex/assistant/ApexCoreService.kt", "r+", encoding="utf-8").write(open("app/src/main/java/com/apex/assistant/ApexCoreService.kt", "r", encoding="utf-8").read().replace("import android.app.*", "import android.app.*\nimport com.apex.ai.*", 1))
+
     
