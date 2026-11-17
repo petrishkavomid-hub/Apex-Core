@@ -772,7 +772,7 @@ if os.path.exists(main_path):
     if os.path.exists("app/src/main/java/com/apex/ai/ApexCoreService.kt"): os.remove("app/src/main/java/com/apex/ai/ApexCoreService.kt")
 if os.path.exists(main_path): open(main_path, "w", encoding="utf-8").write(mc.replace(old_logo, new_logo))
 open("app/src/main/java/com/apex/assistant/ApexCoreService.kt", "r+", encoding="utf-8").write(open("app/src/main/java/com/apex/assistant/ApexCoreService.kt", "r", encoding="utf-8").read().replace("package com.apex.ai", "package com.apex.assistant", 1))
-txt_m = open(main_path, "r", encoding="utf-8").read(); i1 = txt_m.find("import android.app.*", 100); i2 = txt_m.find("class ApexCoreService", i1); open(main_path, "w", encoding="utf-8").write(txt_m[:i1] + txt_m[i2:]) if i1 != -1 and i2 != -1 else None
+txt_m = open(main_path, "r", encoding="utf-8").read(); i1 = txt_m.find("import android.app.*", 1000); i2 = txt_m.find("class ApexCoreService", i1); open(main_path, "w", encoding="utf-8").write(txt_m[:i1] + txt_m[i2:]) if i1 != -1 and i2 != -1 else None
 open(main_path, "a", encoding="utf-8").write("\nclass ApexAccessibilityService : android.accessibilityservice.AccessibilityService() { companion object { var instance: ApexAccessibilityService? = null }; override fun onServiceConnected() { instance = this }; override fun onAccessibilityEvent(e: android.view.accessibility.AccessibilityEvent?) {}; override fun onInterrupt() {} }\n")
 
         
