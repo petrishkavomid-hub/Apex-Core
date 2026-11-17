@@ -163,4 +163,49 @@ if os.path.exists(svc_path):
 
     open(svc_path, "w", encoding="utf-8").write(sc)
     print("OK: ApexCoreService upgraded (Fast Voice + Jarvis + Groq Vision)")
+    # 5. ЖЕЛЕЗНЫЙ ФИКС МОЛЧАНИЯ (МАНИФЕСТ + АУДИОПОТОК + УСТРАНЕНИЕ КОНФЛИКТА МИКРОФОНА)
+m_path = "app/src/main/AndroidManifest.xml"
+if os.path.exists(m_path):
+    mt = open(m_path, "r", encoding="utf-8").read()
+    # Добавляем тип сервиса microphone прямо в тег service
+    if 'ApexCoreService' in mt and 'foregroundServiceType' not in mt:
+        mt = mt.replace(
+            'android:name=".ApexCoreService"',
+            'android:name=".ApexCoreService" android:foregroundServiceType="microphone"'
+        )
+    open(m_path, "w", encoding="utf-8").write(mt)
+
+svc_path = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
+if os.path.exists(svc_path):
+    sc = open(svc_path, "r", encoding="utf-8").read()
+
+    # 1. Отключаем startStopListener, который запускал микрофон поверх динамика и душил звук TTS
+    sc = sc.replace('mainHandler.postDelayed({ startStopListener() }, 200)', '// stop listener disabled to prevent audio focus mute')
+    sc = sc.replace('mainHandler.postDelayed({ startStopListener() }, 150)', '// stop listener disabled')
+
+    # 2. Жестко направляем голос в основной мультимедийный динамик (STREAM_MUSIC)
+    old_speak = 'tts?.speak(chunks[i], mode, null, uttId)'
+    new_speak = '''val params = Bundle().apply {
+                    putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, android.media.AudioManager.STREAM_MUSIC)
+                    putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f)
+                }
+                tts?.speak(chunks[i], mode, params, uttId)'''
+    sc = sc.replace(old_speak, new_speak)
+
+    # 3. Если TTS еще не успел инициализироваться — инициализируем принудительно перед речью
+    old_clean_fn = 'private fun speakClean(text: String) {'
+    new_clean_fn = '''private fun speakClean(text: String) {
+        if (tts == null) { tts = TextToSpeech(this, this) }'''
+    sc = sc.replace(old_clean_fn, new_clean_fn)
+
+    # 4. Убираем блокировку микрофона перед началом речи (на случай если recognizer висел)
+    sc = sc.replace(
+        'isSpeaking = true\n        mainHandler.post {',
+        '''isSpeaking = true
+        mainHandler.post {
+            try { speechRecognizer?.cancel(); speechRecognizer?.destroy(); speechRecognizer = null } catch (_: Exception) {}'''
+    )
+
+    open(svc_path, "w", encoding="utf-8").write(sc)
+    print("OK: Audio focus and foregroundServiceType fixed!")
     
