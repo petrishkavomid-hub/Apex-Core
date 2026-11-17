@@ -771,7 +771,8 @@ if os.path.exists(main_path):
         }'''
     if os.path.exists("app/src/main/java/com/apex/ai/ApexCoreService.kt"): os.remove("app/src/main/java/com/apex/ai/ApexCoreService.kt")
 if os.path.exists(main_path): open(main_path, "w", encoding="utf-8").write(mc.replace(old_logo, new_logo))
-    
+open("app/src/main/java/com/apex/assistant/ApexCoreService.kt", "r+", encoding="utf-8").write(open("app/src/main/java/com/apex/assistant/ApexCoreService.kt", "r", encoding="utf-8").read().replace("package com.apex.ai", "package com.apex.assistant", 1))
+
         
         
         
