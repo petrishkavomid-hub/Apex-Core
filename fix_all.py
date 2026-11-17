@@ -770,8 +770,6 @@ if os.path.exists(main_path):
             elevation = 8f
         }'''
     mc = mc.replace(old_logo, new_logo)
-
-    with open(main_path, "w", encoding="utf-8") as f:
-        f.write(mc)
-
-print("✅ ВСЁ ГОТОВО!")
+    mc = mc.replace("import android.os.*", "import android.os.*\nimport com.apex.assistant.ApexCoreService", 1)
+    
+    
