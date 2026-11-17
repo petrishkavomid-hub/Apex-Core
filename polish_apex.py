@@ -232,6 +232,7 @@ sc = open(svc_path, "r", encoding="utf-8").read()
 sc = sc.replace('в стиле Джарвиса (создатель — Derek Stealth)', 'созданный разработчиком Derek Stealth. Никогда не упоминай Джарвиса и не сравнивай себя с киногероями — ты уникальный и самостоятельный ИИ нового поколения')
 sc = sc.replace('tts = TextToSpeech(this, this, "com.google.android.tts")', 'tts = TextToSpeech(this, this)')
 sc = sc.replace('val b = Bundle().apply { putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, android.media.AudioManager.STREAM_MUSIC); putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f) }; tts?.speak(chunks[i], mode, b, uttId)', 'tts?.speak(chunks[i], mode, null, uttId)')
-sc = sc.replace('onDone?.invoke(ok)', 'showNotifyStatic(ctx, System.currentTimeMillis().toInt(), t, bText); onDone?.invoke(true)')
+sc = sc.replace('onDone?.invoke(ok)', 'showNotifyStatic(ctx, System.currentTimeMillis().toInt(), title.ifEmpty { "Apex AI" }, body.ifEmpty { title }); onDone?.invoke(true)')
+
 open(svc_path, "w", encoding="utf-8").write(sc)
 
