@@ -14,7 +14,8 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Apply Apex AI Fixes
-        run: python3 fix_all.py
+        run: python3 fix_all.py && python3 polish_apex.py
+        
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
