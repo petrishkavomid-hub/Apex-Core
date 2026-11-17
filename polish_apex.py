@@ -186,4 +186,52 @@ if os.path.exists(svc_path):
     sc = sc.replace('val sys = "Ты — Apex AI, интеллектуальный ассистент от Derek Stealth в стиле Джарвиса: спокойный, вежливый, собранный и остроумный. $ctxInfo $noGreetRule Пиши грамотно с правильной пунктуацией (точки, запятые, тире), чтобы речь при озвучке звучала с естественными паузами и интонацией. Не используй символы разметки (*, #, _)."', 'val sys = "Ты — Apex AI, живой, душевный и умный ассистент в стиле Джарвиса (создатель — Derek Stealth). $ctxInfo $noGreetRule Общайся тепло, по-человечески, с харизмой и уместными эмодзи (😊, 🔥, 👍, 💡, ❤️), без сухого робото-канцелярита. Адаптируй длину ответа: на простые вопросы отвечай живо и ёмко; если пользователю грустно или плохо — искренне поддержи, спроси что случилось и предложи реальные решения; если просят код, объяснение, стих, конспект или разбор фото — пиши максимально подробно, глубоко и развёрнуто. Ставь правильную пунктуацию (точки, запятые, тире) для красивой интонации. Не используй символы разметки (*, #, _)."')
     sc = sc.replace('"max_tokens", 700', '"max_tokens", 2800')
     open(svc_path, "w", encoding="utf-8").write(sc)
-    
+    # 1. Добавляем в AndroidManifest.xml разрешение на TTS-голос и показ уведомлений (Android 13-15)
+m_path = "app/src/main/AndroidManifest.xml"
+if os.path.exists(m_path):
+    mt = open(m_path, "r", encoding="utf-8").read()
+    if "TTS_SERVICE" not in mt:
+        mt = mt.replace("</manifest>", '<queries><intent><action android:name="android.intent.action.TTS_SERVICE" /></intent></queries>\n</manifest>')
+    if "POST_NOTIFICATIONS" not in mt:
+        mt = mt.replace("<application", '<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>\n    <application')
+    mt = mt.replace("com.apex.ai.ApexCoreService", "com.apex.assistant.ApexCoreService")
+    open(m_path, "w", encoding="utf-8").write(mt)
+
+# 2. Запрашиваем право на уведомления при старте + добавляем живое прыгающее "Думаю..." при отправке текста и фото
+mc = open(main_path, "r", encoding="utf-8").read()
+if "POST_NOTIFICATIONS" not in mc:
+    mc = mc.replace(
+        "ApexCoreService.startPushPoller(applicationContext)",
+        'ApexCoreService.startPushPoller(applicationContext); if (android.os.Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) { requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 777) }'
+    )
+# Живая анимация "Думаю •  " -> "Думаю  • " -> "Думаю   •" для любого пузыря загрузки
+for old_think in ['"Печатает..."', '"Генерирую..."', '"..."', '"Думаю..."', '"Думаю •  "']:
+    if old_think in mc:
+        mc = mc.replace(old_think, '"Думаю •  "')
+mc = mc.replace(
+    'addMessageBubble("Думаю •  ", false)',
+    '''addMessageBubble("Думаю •  ", false).also { bubble ->
+                val tv = (bubble as? android.view.ViewGroup)?.getChildAt(0) as? android.widget.TextView ?: bubble as? android.widget.TextView
+                val h = android.os.Handler(android.os.Looper.getMainLooper())
+                val fr = arrayOf("Думаю •  ", "Думаю  • ", "Думаю   •", "Думаю •••")
+                var idx = 0
+                h.post(object : Runnable {
+                    override fun run() {
+                        if (tv != null && tv.parent != null && tv.text.toString().startsWith("Думаю")) {
+                            tv.text = fr[idx++ % fr.size]
+                            h.postDelayed(this, 300)
+                        }
+                    }
+                })
+            }'''
+)
+open(main_path, "w", encoding="utf-8").write(mc)
+
+# 3. Убираем упоминание Джарвиса, включаем стандартный TTS без блокировки и мгновенный Push в шторку
+sc = open(svc_path, "r", encoding="utf-8").read()
+sc = sc.replace('в стиле Джарвиса (создатель — Derek Stealth)', 'созданный разработчиком Derek Stealth. Никогда не упоминай Джарвиса и не сравнивай себя с киногероями — ты уникальный и самостоятельный ИИ нового поколения')
+sc = sc.replace('tts = TextToSpeech(this, this, "com.google.android.tts")', 'tts = TextToSpeech(this, this)')
+sc = sc.replace('val b = Bundle().apply { putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, android.media.AudioManager.STREAM_MUSIC); putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f) }; tts?.speak(chunks[i], mode, b, uttId)', 'tts?.speak(chunks[i], mode, null, uttId)')
+sc = sc.replace('onDone?.invoke(ok)', 'showNotifyStatic(ctx, System.currentTimeMillis().toInt(), t, bText); onDone?.invoke(true)')
+open(svc_path, "w", encoding="utf-8").write(sc)
+
