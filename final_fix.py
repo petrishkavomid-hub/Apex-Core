@@ -78,4 +78,42 @@ if os.path.exists(main_path):
     )
     open(main_path, "w", encoding="utf-8").write(mc)
     print("OK: MainActivity updated")
-    
+    import re
+
+svc_path = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
+sc = open(svc_path, "r", encoding="utf-8").read()
+
+# 1. Точность по фото (не путать Тони Старка со Стивом Роджерсом)
+sc = sc.replace(
+    'prompt',
+    '(if (imageBase64 != null) "Внимательно изучи лица, детали одежды и фон на фото, точно определяй людей и персонажей, не путай их. " + prompt else prompt)',
+    1
+)
+
+# 2. Мгновенный "Стоп" в реальном времени (в onPartialResults за 0.1 сек)
+sc = sc.replace(
+    'override fun onPartialResults(partialResults: Bundle?) {}',
+    '''override fun onPartialResults(partialResults: Bundle?) {
+                        val part = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.lowercase()?.trim() ?: ""
+                        if (part.contains("стоп") || part.contains("хватит") || part.contains("замолчи") || part.contains("тихо")) {
+                            try { tts?.stop() } catch (_: Exception) {}
+                            isSpeaking = false
+                            if (isListeningActive) startListeningCycle()
+                        }
+                    }'''
+)
+
+# 3. Мгновенный громкий голос при ответе + убираем лишние задержки
+old_res = 'tts?.speak(reply, TextToSpeech.QUEUE_FLUSH, Bundle(), "APEX_UTTERANCE")'
+new_res = '''try { speechRecognizer?.cancel(); speechRecognizer?.destroy(); speechRecognizer = null } catch (_: Exception) {}
+                                isSpeaking = true
+                                tts?.setPitch(0.86f)
+                                tts?.setSpeechRate(1.04f)
+                                tts?.speak(reply, TextToSpeech.QUEUE_FLUSH, null, "APEX_UTTERANCE")'''
+sc = sc.replace(old_res, new_res)
+sc = sc.replace('mainHandler.postDelayed({ startListeningCycle() }, 1200L)', 'mainHandler.postDelayed({ startListeningCycle() }, 250L)')
+sc = sc.replace('mainHandler.postDelayed({ startListeningCycle() }, 900L)', 'mainHandler.postDelayed({ startListeningCycle() }, 200L)')
+sc = sc.replace('mainHandler.postDelayed({ startListeningCycle() }, 700)', 'mainHandler.postDelayed({ startListeningCycle() }, 150)')
+
+open(svc_path, "w", encoding="utf-8").write(sc)
+
