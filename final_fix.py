@@ -66,7 +66,7 @@ if os.path.exists(svc_path):
 
     sc = re.sub(r'val pConn = URL\([^)]+\)\.openConnection\(\) as HttpURLConnection', 'val pConn = URL("https://ntfy.sh/json?poll=1").openConnection() as HttpURLConnection', sc)
     open(svc_path, "w", encoding="utf-8").write(sc)
-  main_path = "app/src/main/java/com/apex/assistant/MainActivity.kt"
+    main_path = "app/src/main/java/com/apex/assistant/MainActivity.kt"
 if os.path.exists(main_path):
     mc = open(main_path, "r", encoding="utf-8").read()
 
