@@ -1,12 +1,6 @@
 import os, glob, shutil
 
-# 1. Создаём push.json в корне репозитория, если его ещё нет
-if not os.path.exists("push.json"):
-    with open("push.json", "w", encoding="utf-8") as f:
-        f.write('{"push_id":"","title":"Apex AI","body":""}')
-
-# 2. Ставим твой оригинальный логотип на рабочий стол и в центр экрана
-logo_src = glob.glob("fbe20faddd*")
+logo_src = next(iter(glob.glob("fbe20faddd*")), None)
 if logo_src:
     os.makedirs("app/src/main/res/drawable", exist_ok=True)
     shutil.copyfile(logo_src, "app/src/main/res/drawable/apex_custom_logo.png")
@@ -16,6 +10,7 @@ if logo_src:
                 shutil.copyfile(logo_src, os.path.join(root, f))
     for xml_f in glob.glob("app/src/main/res/mipmap-anydpi-v26/*.xml"):
         os.remove(xml_f)
+        
 
 # 3. Обновляем MainActivity.kt (твой логотип по центру + отправка пуша всем в 1 клик)
 main_path = "app/src/main/java/com/apex/assistant/MainActivity.kt"
