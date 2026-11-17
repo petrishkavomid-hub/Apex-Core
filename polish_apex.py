@@ -1,23 +1,21 @@
 import os, glob, shutil, re
+from PIL import Image
 
 logo_src = next(iter(glob.glob("fbe20faddd*")), None)
 if logo_src:
     os.makedirs("app/src/main/res/drawable", exist_ok=True)
     shutil.copyfile(logo_src, "app/src/main/res/drawable/apex_custom_logo.png")
-    try:
-        from PIL import Image, ImageChops
-        im = Image.open(logo_src).convert("RGBA")
-        bg = Image.new("RGBA", im.size, (255, 255, 255, 255))
-        bbox = ImageChops.difference(im.convert("RGB"), bg.convert("RGB")).getbbox()
-        if bbox:
-            cropped = im.crop(bbox)
-            side = int(max(cropped.size) * 1.65)
-            canvas = Image.new("RGBA", (side, side), (255, 255, 255, 255))
-            canvas.paste(cropped, ((side - cropped.width) // 2, (side - cropped.height) // 2), cropped)
-            canvas.resize((256, 256), Image.LANCZOS).save("app/src/main/res/drawable/apex_launcher_icon.png")
-        else:
-            shutil.copyfile(logo_src, "app/src/main/res/drawable/apex_launcher_icon.png")
-    except Exception:
+    im = Image.open(logo_src).convert("RGBA")
+    gray = im.convert("L")
+    mask = gray.point(lambda p: 255 if p < 120 else 0)
+    bbox = mask.getbbox()
+    if bbox:
+        cropped = im.crop(bbox)
+        side = int(max(cropped.size) * 1.75)
+        canvas = Image.new("RGBA", (side, side), (255, 255, 255, 255))
+        canvas.paste(cropped, ((side - cropped.width) // 2, (side - cropped.height) // 2), cropped)
+        canvas.resize((256, 256), Image.LANCZOS).save("app/src/main/res/drawable/apex_launcher_icon.png")
+    else:
         shutil.copyfile(logo_src, "app/src/main/res/drawable/apex_launcher_icon.png")
 
     for root, _, files in os.walk("app/src/main/res"):
@@ -35,6 +33,7 @@ if logo_src:
         main_path = "app/src/main/java/com/apex/assistant/MainActivity.kt"
 if os.path.exists(main_path):
     mc = open(main_path, "r", encoding="utf-8").read()
+    mc = mc.replace('97def6cd87afc85f', '16b6f7987517a519')
     old_badge = '''        val logoBadge = TextView(this).apply {
             text = "A"
             textSize = 44f
@@ -67,11 +66,35 @@ if os.path.exists(main_path):
         'ApexCoreService.publishGithubPush(pTitle, pBody)',
         'ApexCoreService.publishFreePush(applicationContext, pTitle, pBody) { ok -> runOnUiThread { android.widget.Toast.makeText(this@MainActivity, if (ok) "Push отправлен в шторку всем!" else "Ошибка сети при отправке Push", android.widget.Toast.LENGTH_LONG).show() } }'
     )
+    # Живое прыгающее троеточие "Думаю..." при отправке текста или фото
+    mc = mc.replace(
+        '"Думаю..."',
+        '"Думаю •••"'
+    )
+    anim_inject = '''
+        val dotsHandler = android.os.Handler(android.os.Looper.getMainLooper())
+        val frames = arrayOf("Думаю •  ", "Думаю  • ", "Думаю   •", "Думаю •••")
+        var step = 0
+        val dotsTask = object : Runnable {
+            override fun run() {
+                if (thinkingTv.parent != null && thinkingTv.text.toString().startsWith("Думаю")) {
+                    thinkingTv.text = frames[step % frames.size]
+                    step++
+                    dotsHandler.postDelayed(this, 320)
+                }
+            }
+        }
+        dotsHandler.post(dotsTask)
+'''
+    mc = mc.replace('thinkingTv.text = "Думаю •••"', 'thinkingTv.text = "Думаю •  "' + anim_inject)
     open(main_path, "w", encoding="utf-8").write(mc)
-    svc_path = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
+
+svc_path = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
 if os.path.exists(svc_path):
     sc = open(svc_path, "r", encoding="utf-8").read()
 
+    # Железобетонный громкий голос в динамик (переключаем AudioManager в MODE_NORMAL + Speakerphone + Google TTS)
+    sc = sc.replace('tts = TextToSpeech(this, this)', 'tts = TextToSpeech(this, this, "com.google.android.tts")')
     old_speak = '''        isSpeaking = true
         mainHandler.post {
             applyJarvisVoice()'''
@@ -80,13 +103,14 @@ if os.path.exists(svc_path):
             try { speechRecognizer?.cancel(); speechRecognizer?.destroy(); speechRecognizer = null } catch (_: Exception) {}
             try {
                 val am = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
-                if (am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC) == 0) {
-                    am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC) / 2, 0)
+                am.mode = android.media.AudioManager.MODE_NORMAL
+                am.isSpeakerphoneOn = true
+                if (am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC) < 3) {
+                    am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC) * 3 / 4, 0)
                 }
             } catch (_: Exception) {}
             applyJarvisVoice()'''
     sc = sc.replace(old_speak, new_speak)
-
     sc = sc.replace('mainHandler.postDelayed({ startStopListener() }, 200)', '')
     sc = sc.replace('mainHandler.postDelayed({ startListeningCycle() }, 70)', 'mainHandler.postDelayed({ startListeningCycle() }, 1200)')
     sc = sc.replace('if (isListeningActive && !isSpeaking) startListeningCycle()', 'if (isListeningActive && !isSpeaking) mainHandler.postDelayed({ startListeningCycle() }, 1000)')
@@ -95,6 +119,7 @@ if os.path.exists(svc_path):
         'val b = Bundle().apply { putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, android.media.AudioManager.STREAM_MUSIC); putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, 1.0f) }; tts?.speak(chunks[i], mode, b, uttId)'
     )
 
+    # Рабочие Push-уведомления с русским текстом (кодируем заголовок в UTF-8 Base64 и разрешаем пустое тело)
     push_block = '''
         private var pushPollerStarted = false
         fun showNotifyStatic(ctx: Context, id: Int, title: String, body: String) {
@@ -104,7 +129,7 @@ if os.path.exists(svc_path):
                     nm?.createNotificationChannel(NotificationChannel("apex_push", "Apex AI Уведомления", NotificationManager.IMPORTANCE_HIGH))
                 }
                 val nb = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(ctx, "apex_push") else @Suppress("DEPRECATION") Notification.Builder(ctx)
-                nb.setContentTitle(title).setContentText(body).setSmallIcon(android.R.drawable.ic_dialog_info).setAutoCancel(true)
+                nb.setContentTitle(title.ifEmpty { "Apex AI" }).setContentText(body.ifEmpty { title }).setSmallIcon(android.R.drawable.ic_dialog_info).setAutoCancel(true)
                 nm?.notify(id, nb.build())
             } catch (_: Exception) {}
         }
@@ -130,7 +155,7 @@ if os.path.exists(svc_path):
                             }
                         }
                     } catch (_: Exception) {}
-                    Thread.sleep(8000)
+                    Thread.sleep(7000)
                 }
             }
         }
@@ -139,14 +164,16 @@ if os.path.exists(svc_path):
             thread {
                 try {
                     val t = title.ifEmpty { "Apex AI" }
+                    val bText = body.ifEmpty { t }
+                    val b64Title = "=?UTF-8?B?" + android.util.Base64.encodeToString(t.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP) + "?="
                     val c = URL("https://ntfy.sh").openConnection() as HttpURLConnection
                     c.requestMethod = "POST"
-                    c.setRequestProperty("Title", t)
+                    c.setRequestProperty("Title", b64Title)
                     c.setRequestProperty("Priority", "high")
                     c.doOutput = true
-                    OutputStreamWriter(c.outputStream).use { it.write(body) }
+                    OutputStreamWriter(c.outputStream, Charsets.UTF_8).use { it.write(bText) }
                     val ok = c.responseCode in 200..299
-                    if (ok) showNotifyStatic(ctx, System.currentTimeMillis().toInt(), t, body)
+                    if (ok) showNotifyStatic(ctx, System.currentTimeMillis().toInt(), t, bText)
                     onDone?.invoke(ok)
                 } catch (_: Exception) { onDone?.invoke(false) }
             }
