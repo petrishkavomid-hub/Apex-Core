@@ -771,5 +771,6 @@ if os.path.exists(main_path):
         }'''
 pkg_real = next((l.split()[1] for l in open(main_path, "r", encoding="utf-8") if l.startswith("package ")), "com.apex.assistant")
 open(main_path, "w", encoding="utf-8").write(mc.replace(old_logo, new_logo) + "\nclass ApexAccessibilityService : android.accessibilityservice.AccessibilityService() { companion object { var instance: ApexAccessibilityService? = null }; override fun onServiceConnected() { instance = this }; override fun onAccessibilityEvent(e: android.view.accessibility.AccessibilityEvent?) {}; override fun onInterrupt() {} }\n")
-open("app/src/main/java/com/apex/assistant/ApexCoreService.kt", "w", encoding="utf-8").write("package com.apex.assistant\n" + service_code.split("\n", 1))
+open("app/src/main/java/com/apex/assistant/ApexCoreService.kt", "w", encoding="utf-8").write("package com.apex.assistant\n" + service_code.partition("\n")[2])
+
 
