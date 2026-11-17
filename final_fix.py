@@ -116,4 +116,51 @@ sc = sc.replace('mainHandler.postDelayed({ startListeningCycle() }, 900L)', 'mai
 sc = sc.replace('mainHandler.postDelayed({ startListeningCycle() }, 700)', 'mainHandler.postDelayed({ startListeningCycle() }, 150)')
 
 open(svc_path, "w", encoding="utf-8").write(sc)
+# 4. ФИНАЛЬНЫЙ ПАТЧ: МГНОВЕННЫЙ ОТКЛИК, СТОП-СЛОВО, ДЖАРВИС И ТОЧНОЕ ЗРЕНИЕ
+svc_path = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
+if os.path.exists(svc_path):
+    sc = open(svc_path, "r", encoding="utf-8").read()
 
+    # Убираем обязательное слово "Апекс" — реагируем сразу на любую команду или вопрос
+    sc = sc.replace(
+        'if (matchedWake != null) {',
+        'if (true) {'
+    )
+    sc = sc.replace(
+        'val cmd = matchedPhrase.substring(low.indexOf(matchedWake) + matchedWake.length).replace(Regex("^[^а-яa-z0-9А-ЯA-Z]+"), "").trim()',
+        'val cmd = if (matchedWake != null) matchedPhrase.substring(low.indexOf(matchedWake) + matchedWake.length).replace(Regex("^[^а-яa-z0-9А-ЯA-Z]+"), "").trim() else heard.trim()'
+    )
+    # Если сказали просто "Апекс" без команды — не тратим время на "Слушаю вас", сразу ждём команду
+    sc = sc.replace(
+        'if (cmd.isEmpty()) { speakClean("Слушаю вас."); return }',
+        'if (cmd.isEmpty()) { if (isListeningActive && !isSpeaking) startListeningCycle(); return }'
+    )
+
+    # Ускоряем реакцию микрофона до 450 мс и настраиваем голос Джарвиса
+    sc = sc.replace('tts?.setPitch(0.83f)', 'tts?.setPitch(0.80f)')
+    sc = sc.replace('tts?.setSpeechRate(0.86f)', 'tts?.setSpeechRate(0.96f)')
+    sc = sc.replace('EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 500', 'EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 450')
+
+    # Переключаем распознавание фото на Groq Vision вместо слабого Pollinations
+    old_vision = 'for (m in listOf("openai", "gemini", "openai-fast", "gpt-4o-mini")) {'
+    new_vision = '''val visionOnlyMsgs = JSONArray().put(JSONObject().put("role", "user").put("content", arr))
+                        for (vMod in listOf("meta-llama/llama-4-scout-17b-16e-instruct", "llama-3.2-90b-vision-preview")) {
+                            val vBody = JSONObject().put("model", vMod).put("messages", visionOnlyMsgs).put("temperature", 0.25).put("max_tokens", 800)
+                            val (vCode, vRaw) = postJson("https://groq.com", "Bearer $key", vBody)
+                            if (vCode in 200..299) {
+                                val rep = JSONObject(vRaw).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim()
+                                synchronized(chatHistory) {
+                                    chatHistory.add(Pair("user", "[Фото] $prompt"))
+                                    chatHistory.add(Pair("assistant", rep))
+                                    while (chatHistory.size > 40) chatHistory.removeAt(0)
+                                }
+                                saveHistory(ctx)
+                                callback(rep, "Groq Vision • $vMod"); return@thread
+                            }
+                        }
+                        for (m in listOf("openai", "gemini", "openai-fast", "gpt-4o-mini")) {'''
+    sc = sc.replace(old_vision, new_vision)
+
+    open(svc_path, "w", encoding="utf-8").write(sc)
+    print("OK: ApexCoreService upgraded (Fast Voice + Jarvis + Groq Vision)")
+    
