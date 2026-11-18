@@ -337,3 +337,10 @@ c3 = '''
 with open(p_svc, "a", encoding="utf-8") as f:
     f.write(c3)
 print("ALL FIXED!")
+with open(p_svc, "r", encoding="utf-8") as f:
+    s = f.read()
+if s.count("class ApexCoreService") > 1:
+    s = s[:s.rfind("package com.apex.assistant")]
+    with open(p_svc, "w", encoding="utf-8") as f:
+        f.write(s)
+        
