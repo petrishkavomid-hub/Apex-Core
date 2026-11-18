@@ -15,48 +15,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Download Offline Jarvis Voice
-        run: |
-          mkdir -p app/libs app/src/main/assets/jarvis
-          curl -L -s "https://github.com" -o app/libs/sherpa-onnx.aar
-          curl -L -s "https://huggingface.co" -o app/src/main/assets/jarvis/model.onnx
-          curl -L -s "https://huggingface.co.json" -o app/src/main/assets/jarvis/model.onnx.json
-          curl -L -s "https://github.com" -o /tmp/espeak.tar.bz2
-          tar -xjf /tmp/espeak.tar.bz2 -C app/src/main/assets/jarvis/
-          python3 -c 'import json; d=json.load(open("app/src/main/assets/jarvis/model.onnx.json")); open("app/src/main/assets/jarvis/tokens.txt","w").write("\n".join(f"{k} {v}" for k,v in d["phoneme_id_map"].items()))'
-                - name: Apply Apex AI Fixes
+      - name: Apply Apex AI Fixes
         run: |
           git checkout bb021fd -- fix_all.py update_code.py final_fix.py
           pip install pillow -q && python3 fix_all.py && python3 update_code.py
-          curl -L -s "https://githubusercontent.com" || true
-          python3 -c '
-          import os
-          g = "app/build.gradle.kts" if os.path.exists("app/build.gradle.kts") else "app/build.gradle"
-          gs = open(g, encoding="utf-8").read()
-          if "sherpa-onnx.aar" not in gs:
-              open(g, "w", encoding="utf-8").write(gs.replace("dependencies {", "dependencies {\n    implementation(files(\"libs/sherpa-onnx.aar\"))", 1))
-          mp = "app/src/main/AndroidManifest.xml"
-          ms = open(mp, encoding="utf-8").read()
-          if "REQUEST_INSTALL_PACKAGES" not in ms:
-              ms = ms.replace("<application", "<uses-permission android:name=\"android.permission.REQUEST_INSTALL_PACKAGES\" />\n    <application", 1)
-          if "FileProvider" not in ms:
-              os.makedirs("app/src/main/res/xml", exist_ok=True)
-              open("app/src/main/res/xml/provider_paths.xml", "w").write("<?xml version=\"1.0\" encoding=\"utf-8\"?><paths><cache-path name=\"cache\" path=\".\"/></paths>")
-              ms = ms.replace("</application>", "<provider android:name=\"androidx.core.content.FileProvider\" android:authorities=\"${applicationId}.fileprovider\" android:exported=\"false\" android:grantUriPermissions=\"true\"><meta-data android:name=\"android.support.FILE_PROVIDER_PATHS\" android:resource=\"@xml/provider_paths\" /></provider>\n    </application>", 1)
-          open(mp, "w", encoding="utf-8").write(ms)
-          '
-                - name: Patch Service Voice & Photo
-        run: |
-          python3 -c '
-          p = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
-          s = open(p, encoding="utf-8").read()
-          s = s.replace("for (m in listOf(\"openai\", \"gemini\", \"openai-fast\", \"gpt-4o-mini\"))", "for (m in listOf(\"gemini\", \"openai\", \"openai-fast\"))")
-          s = s.replace("if (prompt.isBlank()) \"Подробно разбери это фото.\" else prompt", "if (prompt.isBlank()) \"Внимательно изучи фото: кто или что на нём изображено (известные люди, актёры, блогеры, персонажи, животные, принт на ткани)? Назови имя, если узнаваемо, и ответь точно на русском.\" else \"$prompt (Внимательно изучи фото и назови имя человека, персонажа, животное или предмет).\"")
-          s = s.replace("mainHandler.postDelayed({ startStopListener() }, 200)", "")
-          s = s.replace("val chunks = c.split(Regex(\"(?<=[.!?;—])\\\\s+\")).filter { it.isNotBlank() }", "val chunks = c.split(Regex(\"(?<=[.!?;—])\\\\s+\")).map { it.trim() }.filter { it.any { ch -> ch.isLetterOrDigit() } }")
-          s = s.replace("workflows/build/main/Apex-AI-Update.zip", "workflows/main/main/Apex-AI-Update.zip")
-          open(p, "w", encoding="utf-8").write(s)
-          '
+          python3 -c 'p="app/src/main/java/com/apex/assistant/ApexCoreService.kt"; s=open(p).read(); s=s.replace("for (m in listOf(\"openai\", \"gemini\", \"openai-fast\", \"gpt-4o-mini\"))","for (m in listOf(\"gemini\", \"openai\", \"openai-fast\"))").replace("mainHandler.postDelayed({ startStopListener() }, 200)","").replace("workflows/build/main/Apex-AI-Update.zip","workflows/main/main/Apex-AI-Update.zip"); open(p,"w").write(s)'
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
