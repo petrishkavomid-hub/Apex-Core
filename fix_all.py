@@ -350,4 +350,7 @@ b = s.rfind("private var tts: TextToSpeech?")
 if a != -1 and b != -1 and a != b:
     with open(p_svc, "w", encoding="utf-8") as f:
         f.write(s[:a] + s[b:])
-        
+        s = open(p_svc, encoding="utf-8").read()
+a, b = s.find("private var tts:"), s.rfind("private var tts:")
+if a != b: open(p_svc, "w", encoding="utf-8").write(s[:a] + s[b:])
+    
