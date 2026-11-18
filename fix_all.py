@@ -336,8 +336,8 @@ c3 = '''
 '''
 with open(p_svc, "a", encoding="utf-8") as f:
     f.write(c3)
-print("ALL FIXED!")
 s = open(p_svc, encoding="utf-8").read()
-a, b = s.find("private var tts:"), s.rfind("private var tts:")
-if a != b: open(p_svc, "w", encoding="utf-8").write(s[:a] + s[b:])
+i1, i2 = s.find("private var ttsReady"), s.rfind("companion object")
+if i1 != -1 and i2 > i1: open(p_svc, "w", encoding="utf-8").write(s[:i1] + "private var ttsReady = false\n    private var pendingSpeak: String? = null\n    private var speechRecognizer: SpeechRecognizer? = null\n    private var isListeningActive = false\n    private var isSpeaking = false\n    private var isAwakeWaitingCommand = false\n    private val mainHandler = Handler(Looper.getMainLooper())\n\n    " + s[i2:])
     
+
