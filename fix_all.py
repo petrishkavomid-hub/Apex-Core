@@ -343,4 +343,11 @@ if s.count("class ApexCoreService") > 1:
     s = s[:s.rfind("package com.apex.assistant")]
     with open(p_svc, "w", encoding="utf-8") as f:
         f.write(s)
+        with open(p_svc, "r", encoding="utf-8") as f:
+    s = f.read()
+a = s.find("private var tts: TextToSpeech?")
+b = s.rfind("private var tts: TextToSpeech?")
+if a != -1 and b != -1 and a != b:
+    with open(p_svc, "w", encoding="utf-8") as f:
+        f.write(s[:a] + s[b:])
         
