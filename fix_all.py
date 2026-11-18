@@ -638,13 +638,13 @@ with open("app/src/main/java/com/apex/assistant/ApexCoreService.kt", "w", encodi
 main_path = "app/src/main/java/com/apex/assistant/MainActivity.kt"
 if os.path.exists(main_path):
     with open(main_path, "r", encoding="utf-8") as f:
-    mc = f.read()
+        mc = f.read()
     idx_dup = mc.find("class ApexCoreService :")
     if idx_dup != -1: mc = mc[:idx_dup].rstrip() + "\n"
     mc = mc.replace('return return "', 'return "')
     mc = mc.replace('setContentView(drawerLayout)', 'setContentView(drawerLayout)\n        ApexCoreService.checkAppUpdateDialog(this)')
     mc = mc.replace('prefs.edit().putString("chat_history", "[]").apply()', 'ApexCoreService.clearHistory(this@MainActivity)')
-    уmc = mc.replace('if (prefs.getBoolean("dev_unlocked", false)) {', 'val devIdNow = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: ""\n            if (CREATOR_IDS.contains(devIdNow) || prefs.getBoolean("dev_unlocked", false)) {')
+    mc = mc.replace('if (prefs.getBoolean("dev_unlocked", false)) {', 'val devIdNow = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: ""\n            if (CREATOR_IDS.contains(devIdNow) || prefs.getBoolean("dev_unlocked", false)) {')
     mc = mc.replace('sendDirectToAdminBot("📢 PUSH-РАССЫЛКА APEX AI\\nЗаголовок: $pTitle\\nТекст: $pBody")\n                    postToWorker(prefs, JSONObject().apply {\n                        put("app_event", JSONObject().apply {\n                            put("type", "send_push")\n                            put("title", pTitle)\n                            put("body", pBody)\n                        })\n                    })', 'ApexCoreService.publishGithubPush(pTitle, pBody)') open(main_path, "w", encoding="utf-8").write(mc + "\nclass ApexAccessibilityService : android.accessibilityservice.AccessibilityService() { companion object { var instance: ApexAccessibilityService? = null }; override fun onServiceConnected() { instance = this }; override fun onAccessibilityEvent(e: android.view.accessibility.AccessibilityEvent?) {}; override fun onInterrupt() {} }\n")
-
+open(main_path, "w", encoding="utf-8").write(mc + "\nclass ApexAccessibilityService : android.accessibilityservice.AccessibilityService() { companion object { var instance: ApexAccessibilityService? = null }; override fun onServiceConnected() { instance = this }; override fun onAccessibilityEvent(e: android.view.accessibility.AccessibilityEvent?) {}; override fun onInterrupt() {} }\n")
 open("update_code.py", "w").write("print('ok')")
