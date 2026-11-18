@@ -339,5 +339,6 @@ with open(p_svc, "a", encoding="utf-8") as f:
 s = open(p_svc, encoding="utf-8").read()
 i1, i2 = s.find("private var ttsReady"), s.rfind("companion object")
 if i1 != -1 and i2 > i1: open(p_svc, "w", encoding="utf-8").write(s[:i1] + "private var ttsReady = false\n    private var pendingSpeak: String? = null\n    private var speechRecognizer: SpeechRecognizer? = null\n    private var isListeningActive = false\n    private var isSpeaking = false\n    private var isAwakeWaitingCommand = false\n    private val mainHandler = Handler(Looper.getMainLooper())\n\n    " + s[i2:])
-    
+   open("update_code.py", "w").write("print('ok')")
+ 
 
