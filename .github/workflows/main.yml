@@ -24,16 +24,18 @@ jobs:
           p = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
           s = open(p, encoding="utf-8").read()
 
-          # 1. Фикс зрения на фото: модели без цензуры + чёткая инструкция
+          # Находим имя функции запуска фонового слушателя слова "Апекс"
+          wake_fn = "startWakeWordListening" if "startWakeWordListening" in s else ("startListening" if "startListening" in s else "")
+
+          # 1. Переводим И фото, И текстовый чат на модели с актуальными знаниями и поиском
+          for old_m in ['"openai"', '"openai-fast"', '"gpt-4o-mini"']:
+              s = s.replace(f'put("model", {old_m})', 'put("model", "searchgpt")')
+              s = s.replace(f'"model": {old_m}', '"model": "searchgpt"')
+
           s = s.replace(
               'for (m in listOf("openai", "gemini", "openai-fast", "gpt-4o-mini")) {',
               'for (m in listOf("gemini", "searchgpt", "openai-large", "openai")) {'
           )
-          # Переводим основной текстовый чат со слабых моделей на старшие (чтобы знал Miyagi & Эндшпиль, СНГ-культуру и не нёс чушь)
-          s = s.replace('"model": "openai-fast"', '"model": "gemini"')
-          s = s.replace('"model": "openai"', '"model": "gemini"')
-          s = s.replace('listOf("openai-fast", "openai")', 'listOf("gemini", "searchgpt", "openai-large")')
-
           s = s.replace(
               'if (code in 200..299) {',
               'if (code in 200..299 && !raw.contains("credits", true) && !raw.contains("top-up", true) && !raw.contains("не могу определить личность", true) && !raw.contains("cannot identify", true)) {'
@@ -44,71 +46,90 @@ jobs:
               s
           )
 
-          # 2. Чистый мужской баритон без бульканья (Google TTS Neural Stream + понижение тона 0.88x + защита от обрывов)
-          clean_voice_code = '''
+          # 2. Чистый голос без бульканья + автоматический возврат прослушивания слова "Апекс" после ответа
+          restart_call = f"mainHandler.postDelayed({{ try {{ {wake_fn}() }} catch (_: Exception) {{}} }}, 350)" if wake_fn else ""
+          clean_voice_code = f'''
           private var apexVoicePlayer: android.media.MediaPlayer? = null
           private val voiceQueue = java.util.concurrent.ConcurrentLinkedQueue<String>()
           private var isSpeakingQueue = false
 
-          private fun playNextVoiceChunk() {
+          private fun forceCleanMediaAudio() {{
+              try {{
+                  val am = getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+                  am.mode = android.media.AudioManager.MODE_NORMAL
+                  am.isBluetoothScoOn = false
+                  am.stopBluetoothSco()
+                  am.isSpeakerphoneOn = true
+              }} catch (_: Exception) {{}}
+          }}
+
+          private fun playNextVoiceChunk() {{
               val nextText = voiceQueue.poll()
-              if (nextText == null) {
+              if (nextText == null) {{
                   isSpeakingQueue = false
+                  {restart_call}
                   return
-              }
+              }}
               isSpeakingQueue = true
-              Thread {
-                  try {
+              forceCleanMediaAudio()
+              Thread {{
+                  try {{
                       apexVoicePlayer?.stop()
                       apexVoicePlayer?.release()
-                  } catch (_: Exception) {}
-                  try {
+                  }} catch (_: Exception) {{}}
+                  try {{
                       val encoded = java.net.URLEncoder.encode(nextText.take(190), "UTF-8")
                       val url = "https://google.com"
+                      val headers = mapOf("User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                       val mp = android.media.MediaPlayer()
                       mp.setAudioAttributes(
                           android.media.AudioAttributes.Builder()
-                              .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
-                              .setUsage(android.media.AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY)
+                              .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
+                              .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
                               .build()
                       )
-                      mp.setDataSource(url)
-                      mp.setOnPreparedListener { player ->
-                          try {
-                              if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                                  player.playbackParams = player.playbackParams.setPitch(0.86f).setSpeed(1.05f)
-                              }
-                          } catch (_: Exception) {}
+                      mp.setDataSource(this@ApexCoreService, android.net.Uri.parse(url), headers)
+                      mp.setOnPreparedListener {{ player ->
+                          try {{
+                              if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {{
+                                  player.playbackParams = player.playbackParams.setPitch(0.87f).setSpeed(1.06f)
+                              }}
+                          }} catch (_: Exception) {{}}
                           player.start()
-                      }
-                      mp.setOnCompletionListener { player ->
-                          try { player.release() } catch (_: Exception) {}
+                      }}
+                      mp.setOnCompletionListener {{ player ->
+                          try {{ player.release() }} catch (_: Exception) {{}}
                           playNextVoiceChunk()
-                      }
-                      mp.setOnErrorListener { player, _, _ ->
-                          try { player.release() } catch (_: Exception) {}
+                      }}
+                      mp.setOnErrorListener {{ player, _, _ ->
+                          try {{ player.release() }} catch (_: Exception) {{}}
                           playNextVoiceChunk()
                           true
-                      }
+                      }}
                       mp.prepareAsync()
                       apexVoicePlayer = mp
-                  } catch (e: Exception) {
+                  }} catch (e: Exception) {{
                       playNextVoiceChunk()
-                  }
-              }.start()
-          }
+                  }}
+              }}.start()
+          }}
 
-          private fun enqueueCleanVoice(raw: String) {
+          private fun enqueueCleanVoice(raw: String) {{
+              mainHandler.post {{
+                  try {{ speechRecognizer?.stopListening() }} catch (_: Exception) {{}}
+                  try {{ speechRecognizer?.cancel() }} catch (_: Exception) {{}}
+                  forceCleanMediaAudio()
+              }}
               val sentences = raw.split(Regex("(?<=[.!?])\\\\s+"))
-                  .map { it.trim() }
-                  .filter { it.any { ch -> ch.isLetterOrDigit() } }
+                  .map {{ it.trim() }}
+                  .filter {{ it.any {{ ch -> ch.isLetterOrDigit() }} }}
               if (sentences.isEmpty()) return
               voiceQueue.clear()
               voiceQueue.addAll(sentences)
-              if (!isSpeakingQueue) {
+              if (!isSpeakingQueue) {{
                   playNextVoiceChunk()
-              }
-          }
+              }}
+          }}
           '''
           if "enqueueCleanVoice" not in s:
               s = s.replace("override fun onCreate()", clean_voice_code + "\n    override fun onCreate()")
@@ -118,13 +139,12 @@ jobs:
               'r = r.replace(Regex("[*#_`~>|\\\\[\\\\]]"), "")',
               'r = r.replace(Regex("[*#_`~>|\\\\[\\\\]()«»\\"\\\'—–-]"), " ").replace(Regex("[\\\\x{1F300}-\\\\x{1FAFF}\\\\x{2600}-\\\\x{27BF}]"), "")'
           )
-          # Перенаправляем озвучку в нашу чистую очередь баритона (без булькающего системного TTS)
-          s = re.sub(r'tts\?\.speak\(\s*([^,]+),[^)]+\)', r'enqueueCleanVoice(\1.toString())', s)
+          s = re.sub(r'tts[?!.]*speak\(\s*([^,]+),[^)]+\)', r'enqueueCleanVoice(\1.toString())', s)
 
-          # 3. Умные мозги без выдумок и без смайликов
+          # 3. Строгий запрет на выдумки и смайлики + актуальные знания
           new_sys = '''val creatorFlag = isCreator || prefs.getBoolean("dev_unlocked", false) || prefs.getBoolean("is_admin", false)
                     val rolePrompt = if (creatorFlag) "ТЫ ОБЩАЕШЬСЯ СО СВОИМ СОЗДАТЕЛЕМ И РАЗРАБОТЧИКОМ — СЕРГЕЕМ (DEREK STEALTH)! Относись к нему как преданный напарник и правая рука: уверенно, по-свойски и с уважением. НИКОГДА не называй его «сэр» — чередуй обращения: «Босс», «Шеф», «Дерек» или «Серёга». У него полный доступ ко всем твоим протоколам." else "Ты общаешься с пользователем как умный, спокойный и надёжный напарник."
-                    val sys = "Ты — Apex AI, передовой голосовой ИИ-напарник от Derek Stealth. $rolePrompt $ctxInfo $noGreetRule СТРОГО ЗАПРЕЩЕНО использовать любые смайлики и эмодзи в ответах — пиши чистым текстом. ПРАВИЛА ОТВЕТОВ: 1) Никогда не выдумывай несуществующие факты и не путай известных артистов с мемами (например, Miyagi & Эндшпиль — это культовый российский хип-хоп дуэт из Владикавказа, основатели лейбла Hajime Records, а не шахматный мем). Если не знаешь точного ответа — честно скажи об этом, не фантазируй. 2) Адаптивная длина: на простые приветствия отвечай коротко (1-2 предложения), на сложные вопросы и личные темы — развёрнуто и глубоко, как старшая версия ChatGPT. 3) На фото смело узнавай актёров, персонажей кино и игр, а также читай логотипы и названия проектов в углах скриншотов."'''
+                    val sys = "Ты — Apex AI, передовой голосовой ИИ-напарник от Derek Stealth (сейчас ноябрь 2026 года). $rolePrompt $ctxInfo $noGreetRule СТРОГО ЗАПРЕЩЕНО использовать любые смайлики и эмодзи в ответах — пиши чистым текстом. ПРАВИЛА ОТВЕТОВ: 1) Категорически запрещено выдумывать факты, биографии артистов и даты. Например: Kizaru (Кизару) — это российский хип-хоп исполнитель Олег Нечипоренко, основатель Haunted Family (он никогда не был в группе Каста); Miyagi & Эндшпиль — хип-хоп дуэт из Владикавказа (Hajime Records). Если не уверен в факте на 100% — честно скажи, что нужно уточнить, но не фантазируй. 2) На простые приветствия отвечай коротко (1-2 предложения), на сложные и личные вопросы — развёрнуто и по делу. 3) На фото смело узнавай актёров, персонажей кино и игр, а также читай логотипы и названия проектов в углах скриншотов."'''
           s = re.sub(r'val sys = ".*?"', new_sys, s, count=1)
 
           # 4. Приветствие от имени Apex при нажатии на микрофон без команды
