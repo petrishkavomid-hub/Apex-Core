@@ -22,7 +22,19 @@ jobs:
           import re
 
           p = "app/src/main/java/com/apex/assistant/MainActivity.kt"
-          s = open(p, encoding="utf-8").read()
+          lines = open(p, encoding="utf-8").readlines()
+          print("=== LINE 1570 BEFORE ===", repr(lines[1569]) if len(lines) >= 1570 else "NO_LINE")
+          s = "".join(lines)
+
+          # Фикс опечатки на 1570-й строке из bb021fd (обычно двойные кавычки или перенос внутри строки)
+          if len(lines) >= 1570:
+              bad = lines[1569]
+              # Если в строке нечетное число кавычек или лишний мусор после точки с запятой/скобки
+              fixed = re.sub(r'""([^"+])', r'"\1', bad)
+              if fixed == bad and bad.count('"') % 2 != 0:
+                  fixed = bad.rstrip('\n') + '"\n'
+              lines[1569] = fixed
+              s = "".join(lines)
 
           # 1. Фикс фото: приоритет Groq / OpenAI-Large без цензуры на лица
           s = s.replace('"model": "openai"', '"model": "groq"')
@@ -60,7 +72,7 @@ jobs:
               s = s.replace("override fun onCreate(", studio_tts + "\n    override fun onCreate(")
           s = re.sub(r'tts\?\.speak\(\s*([^,]+),[^)]+\)', r'speakStudioVoice(\1)', s)
 
-          # 3. Безопасная замена прямо внутри строки sys (ничего не вклиниваем между строками!)
+          # 3. Характер, зрение и лимит смайликов
           rules = (
               " ПРАВИЛА ОТВЕТА: 1) На простые приветствия отвечай коротко (1-2 предложения), "
               "а на личные переживания, ссоры и сложные вопросы — развёрнуто, глубоко и с реальной поддержкой, как ChatGPT. "
