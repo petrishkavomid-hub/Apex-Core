@@ -38,8 +38,8 @@ jobs:
           # 2. Живой нейросетевой голос (Microsoft Edge TTS - Дмитрий) без бульканья и смены дизайна
           edge_tts_code = '''
           private var edgePlayer: android.media.MediaPlayer? = null
-          private fun speakEdgeTTS(rawText: String) {
-              val clean = rawText.replace(Regex("[\\\\*#_`~]"), "")
+          private fun speakEdgeTTS(rawText: CharSequence?) {
+              val clean = (rawText?.toString() ?: "").replace(Regex("[\\\\*#_`~]"), "")
                   .replace(Regex("[\\\\x{1F300}-\\\\x{1FAFF}\\\\x{2600}-\\\\x{27BF}]"), "")
                   .trim()
               if (clean.isEmpty()) return
@@ -65,7 +65,7 @@ jobs:
           '''
           if "speakEdgeTTS" not in s:
               s = s.replace("override fun onCreate(", edge_tts_code + "\n    override fun onCreate(")
-          s = re.sub(r'tts\?\.speak\([^)]+\)', 'speakEdgeTTS(r)', s)
+          s = re.sub(r'tts\?\.speak\(\s*([^,]+),[^)]+\)', r'speakEdgeTTS(\1)', s)
           s = s.replace('mainHandler.postDelayed({ startListening() }, 300)', 'mainHandler.postDelayed({ startListening() }, 700)')
 
           # 3. Умный характер как в GPT: глубина, зрение по деталям и строгий лимит смайлов
