@@ -24,63 +24,107 @@ jobs:
           p = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
           s = open(p, encoding="utf-8").read()
 
-          # 1. Фикс фото: ставим модели без цензуры на актёров и персонажей + чёткая инструкция
+          # 1. Фикс зрения на фото: модели без цензуры + чёткая инструкция
           s = s.replace(
               'for (m in listOf("openai", "gemini", "openai-fast", "gpt-4o-mini")) {',
               'for (m in listOf("gemini", "searchgpt", "openai-large", "openai")) {'
           )
+          # Переводим основной текстовый чат со слабых моделей на старшие (чтобы знал Miyagi & Эндшпиль, СНГ-культуру и не нёс чушь)
+          s = s.replace('"model": "openai-fast"', '"model": "gemini"')
+          s = s.replace('"model": "openai"', '"model": "gemini"')
+          s = s.replace('listOf("openai-fast", "openai")', 'listOf("gemini", "searchgpt", "openai-large")')
+
           s = s.replace(
               'if (code in 200..299) {',
               'if (code in 200..299 && !raw.contains("credits", true) && !raw.contains("top-up", true) && !raw.contains("не могу определить личность", true) && !raw.contains("cannot identify", true)) {'
           )
           s = re.sub(
               r'if \(prompt\.isBlank\(\)\) ".*?" else prompt',
-              'if (prompt.isBlank()) "Внимательно изучи фото: кто или что на нём изображено (актёры, персонажи кино, блогеры, логотипы игр в углах скриншота)? Обязательно назови имя актёра или персонажа, если он узнаваем, и ответь по делу без смайликов." else "$prompt (Внимательно рассмотри фото, прочитай мелкий текст и логотипы, обязательно назови имя актёра или персонажа, если он узнаваем. Не используй смайлики)."',
+              'if (prompt.isBlank()) "Внимательно изучи фото: кто или что на нём изображено (актёры, персонажи кино, игр, блогеры, логотипы)? Обязательно назови имя, если узнаваем, и ответь по делу без смайликов." else "$prompt (Внимательно рассмотри фото, прочитай мелкий текст и логотипы, назови имя актёра или персонажа, если узнаваем. Не используй смайлики)."',
               s
           )
 
-          # 2. Топовый живой нейросетевой голос (Microsoft Edge TTS - Дмитрий) + чистка текста
-          edge_player_code = '''
-          private var edgeMediaPlayer: android.media.MediaPlayer? = null
-          private fun playNeuralVoice(textToRead: String) {
+          # 2. Чистый мужской баритон без бульканья (Google TTS Neural Stream + понижение тона 0.88x + защита от обрывов)
+          clean_voice_code = '''
+          private var apexVoicePlayer: android.media.MediaPlayer? = null
+          private val voiceQueue = java.util.concurrent.ConcurrentLinkedQueue<String>()
+          private var isSpeakingQueue = false
+
+          private fun playNextVoiceChunk() {
+              val nextText = voiceQueue.poll()
+              if (nextText == null) {
+                  isSpeakingQueue = false
+                  return
+              }
+              isSpeakingQueue = true
               Thread {
                   try {
-                      edgeMediaPlayer?.stop()
-                      edgeMediaPlayer?.release()
+                      apexVoicePlayer?.stop()
+                      apexVoicePlayer?.release()
                   } catch (_: Exception) {}
                   try {
-                      val encoded = java.net.URLEncoder.encode(textToRead, "UTF-8")
-                      val url = "https://travisvn.com"
+                      val encoded = java.net.URLEncoder.encode(nextText.take(190), "UTF-8")
+                      val url = "https://google.com"
                       val mp = android.media.MediaPlayer()
+                      mp.setAudioAttributes(
+                          android.media.AudioAttributes.Builder()
+                              .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+                              .setUsage(android.media.AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY)
+                              .build()
+                      )
                       mp.setDataSource(url)
-                      mp.setOnPreparedListener { it.start() }
-                      mp.setOnCompletionListener { it.release() }
+                      mp.setOnPreparedListener { player ->
+                          try {
+                              if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                                  player.playbackParams = player.playbackParams.setPitch(0.86f).setSpeed(1.05f)
+                              }
+                          } catch (_: Exception) {}
+                          player.start()
+                      }
+                      mp.setOnCompletionListener { player ->
+                          try { player.release() } catch (_: Exception) {}
+                          playNextVoiceChunk()
+                      }
+                      mp.setOnErrorListener { player, _, _ ->
+                          try { player.release() } catch (_: Exception) {}
+                          playNextVoiceChunk()
+                          true
+                      }
                       mp.prepareAsync()
-                      edgeMediaPlayer = mp
+                      apexVoicePlayer = mp
                   } catch (e: Exception) {
-                      try { tts?.speak(textToRead, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "apex") } catch (_: Exception) {}
+                      playNextVoiceChunk()
                   }
               }.start()
           }
+
+          private fun enqueueCleanVoice(raw: String) {
+              val sentences = raw.split(Regex("(?<=[.!?])\\\\s+"))
+                  .map { it.trim() }
+                  .filter { it.any { ch -> ch.isLetterOrDigit() } }
+              if (sentences.isEmpty()) return
+              voiceQueue.clear()
+              voiceQueue.addAll(sentences)
+              if (!isSpeakingQueue) {
+                  playNextVoiceChunk()
+              }
+          }
           '''
-          if "playNeuralVoice" not in s:
-              s = s.replace("override fun onCreate()", edge_player_code + "\n    override fun onCreate()")
+          if "enqueueCleanVoice" not in s:
+              s = s.replace("override fun onCreate()", clean_voice_code + "\n    override fun onCreate()")
 
           s = s.replace('mainHandler.postDelayed({ startStopListener() }, 200)', '')
-          s = s.replace(
-              'val chunks = c.split(Regex("(?<=[.!?;—])\\\\s+")).filter { it.isNotBlank() }',
-              'val chunks = c.split(Regex("(?<=[.!?;—])\\\\s+")).map { it.trim() }.filter { it.any { ch -> ch.isLetterOrDigit() } }'
-          )
           s = s.replace(
               'r = r.replace(Regex("[*#_`~>|\\\\[\\\\]]"), "")',
               'r = r.replace(Regex("[*#_`~>|\\\\[\\\\]()«»\\"\\\'—–-]"), " ").replace(Regex("[\\\\x{1F300}-\\\\x{1FAFF}\\\\x{2600}-\\\\x{27BF}]"), "")'
           )
-          s = re.sub(r'tts\?\.speak\(\s*([^,]+),[^)]+\)', r'playNeuralVoice(\1)', s)
+          # Перенаправляем озвучку в нашу чистую очередь баритона (без булькающего системного TTS)
+          s = re.sub(r'tts\?\.speak\(\s*([^,]+),[^)]+\)', r'enqueueCleanVoice(\1.toString())', s)
 
-          # 3. Умный характер без смайликов и с развёрнутыми ответами на сложные темы
+          # 3. Умные мозги без выдумок и без смайликов
           new_sys = '''val creatorFlag = isCreator || prefs.getBoolean("dev_unlocked", false) || prefs.getBoolean("is_admin", false)
                     val rolePrompt = if (creatorFlag) "ТЫ ОБЩАЕШЬСЯ СО СВОИМ СОЗДАТЕЛЕМ И РАЗРАБОТЧИКОМ — СЕРГЕЕМ (DEREK STEALTH)! Относись к нему как преданный напарник и правая рука: уверенно, по-свойски и с уважением. НИКОГДА не называй его «сэр» — чередуй обращения: «Босс», «Шеф», «Дерек» или «Серёга». У него полный доступ ко всем твоим протоколам." else "Ты общаешься с пользователем как умный, спокойный и надёжный напарник."
-                    val sys = "Ты — Apex AI, передовой голосовой ИИ-напарник от Derek Stealth. $rolePrompt $ctxInfo $noGreetRule СТРОГО ЗАПРЕЩЕНО использовать любые смайлики и эмодзи в ответах — пиши чистым текстом. Адаптивная длина: на простые приветствия отвечай коротко (1-2 предложения), а на личные переживания, ссоры, сложные вопросы и просьбы о совете отвечай развёрнуто, глубоко и с реальной поддержкой, как старшая версия ChatGPT. На фото смело узнавай известных актёров, персонажей кино (например, Тони Старка / Роберта Дауни-младшего), а также читай логотипы и названия проектов в углах скриншотов."'''
+                    val sys = "Ты — Apex AI, передовой голосовой ИИ-напарник от Derek Stealth. $rolePrompt $ctxInfo $noGreetRule СТРОГО ЗАПРЕЩЕНО использовать любые смайлики и эмодзи в ответах — пиши чистым текстом. ПРАВИЛА ОТВЕТОВ: 1) Никогда не выдумывай несуществующие факты и не путай известных артистов с мемами (например, Miyagi & Эндшпиль — это культовый российский хип-хоп дуэт из Владикавказа, основатели лейбла Hajime Records, а не шахматный мем). Если не знаешь точного ответа — честно скажи об этом, не фантазируй. 2) Адаптивная длина: на простые приветствия отвечай коротко (1-2 предложения), на сложные вопросы и личные темы — развёрнуто и глубоко, как старшая версия ChatGPT. 3) На фото смело узнавай актёров, персонажей кино и игр, а также читай логотипы и названия проектов в углах скриншотов."'''
           s = re.sub(r'val sys = ".*?"', new_sys, s, count=1)
 
           # 4. Приветствие от имени Apex при нажатии на микрофон без команды
