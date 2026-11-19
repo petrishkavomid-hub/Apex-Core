@@ -15,77 +15,71 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Apply Apex AI Fixes
+      - name: Restore Working Base & Apply Clean Fixes
         run: |
-          git checkout bb021fd -- fix_all.py app/src/main/java/com/apex/assistant/MainActivity.kt
-          pip install pillow -q && python3 fix_all.py
+          git checkout bb021fd -- app/
           cat << 'EOF' > patch_apex.py
           import re
 
           p = "app/src/main/java/com/apex/assistant/MainActivity.kt"
           s = open(p, encoding="utf-8").read()
 
-          # 1. Фикс фото: приоритет Groq Vision и запрет на галлюцинации
-          s = s.replace(
-              'for (m in listOf("openai", "flux", "searchgpt"))',
-              'for (m in listOf("groq-vision", "openai", "flux"))'
-          )
-          s = s.replace(
-              'if (code in 200..299 && body.length > 5)',
-              'if (code in 200..299 && body.length > 5 && !body.contains("sorry") && !body.contains("cannot"))'
+          # 1. Фикс фото: убираем цензуру на лица и переключаем приоритет на Groq / Pollinations без фильтров
+          s = s.replace('"model": "openai"', '"model": "groq"')
+          s = s.replace('listOf("openai", "flux", "searchgpt")', 'listOf("groq", "openai-large", "openai")')
+          s = re.sub(
+              r'("role":\s*"user",\s*"content":\s*\[)',
+              r'\1{"type": "text", "text": "Опиши фото максимально точно. Если на фото известный актёр, персонаж, блогер или игра — обязательно назови его имя и откуда он. Никогда не говори фразу я не могу определить личность."}, ',
+              s
           )
 
-          # 2. Живой нейросетевой голос (Microsoft Edge TTS - Дмитрий) без бульканья и смены дизайна
-          edge_tts_code = '''
-          private var edgePlayer: android.media.MediaPlayer? = null
-          private fun speakEdgeTTS(rawText: CharSequence?) {
+          # 2. Живой студийный голос (Onyx / Ash через Pollinations Audio) без бульканья
+          studio_tts = '''
+          private var studioPlayer: android.media.MediaPlayer? = null
+          private fun speakStudioVoice(rawText: CharSequence?) {
               val clean = (rawText?.toString() ?: "").replace(Regex("[\\\\*#_`~]"), "")
                   .replace(Regex("[\\\\x{1F300}-\\\\x{1FAFF}\\\\x{2600}-\\\\x{27BF}]"), "")
                   .trim()
               if (clean.isEmpty()) return
               Thread {
                   try {
-                      edgePlayer?.stop()
-                      edgePlayer?.release()
+                      studioPlayer?.stop()
+                      studioPlayer?.release()
                   } catch (_: Exception) {}
                   try {
-                      val encoded = java.net.URLEncoder.encode(clean, "UTF-8")
-                      val url = "https://travisvn.com"
+                      val prompt = java.net.URLEncoder.encode("Прочитай уверенным, спокойным мужским голосом: " + clean, "UTF-8")
+                      val url = "https://pollinations.ai"
                       val mp = android.media.MediaPlayer()
                       mp.setDataSource(url)
                       mp.setOnPreparedListener { it.start() }
                       mp.setOnCompletionListener { it.release() }
                       mp.prepareAsync()
-                      edgePlayer = mp
+                      studioPlayer = mp
                   } catch (e: Exception) {
                       try { tts?.speak(clean, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "apex") } catch (_: Exception) {}
                   }
               }.start()
           }
           '''
-          if "speakEdgeTTS" not in s:
-              s = s.replace("override fun onCreate(", edge_tts_code + "\n    override fun onCreate(")
-          s = re.sub(r'tts\?\.speak\(\s*([^,]+),[^)]+\)', r'speakEdgeTTS(\1)', s)
-          s = s.replace('mainHandler.postDelayed({ startListening() }, 300)', 'mainHandler.postDelayed({ startListening() }, 700)')
+          if "speakStudioVoice" not in s:
+              s = s.replace("override fun onCreate(", studio_tts + "\n    override fun onCreate(")
+          s = re.sub(r'tts\?\.speak\(\s*([^,]+),[^)]+\)', r'speakStudioVoice(\1)', s)
 
-          # 3. Умный характер как в GPT: глубина, зрение по деталям и строгий лимит смайлов
+          # 3. Умный характер и правила ответов (как старший ChatGPT)
           new_sys = '''val creatorFlag = isCreatorMode()
                   val rolePrompt = if (creatorFlag) {
-                      "Ты общаешься со своим Создателем и разработчиком (обращайся Босс, Шеф или по имени). Держись как верный, умный напарник."
+                      "Ты общаешься со своим Создателем (обращайся Босс, Шеф или по имени). Держись как верный, умный напарник."
                   } else {
-                      "Ты — умный ИИ-помощник APEX AI. Общайся с пользователем на равных, дружелюбно, уважительно и без фамильярности."
+                      "Ты — умный ИИ-помощник APEX AI. Общайся с пользователем на равных, дружелюбно и уважительно."
                   }
-                  val sys = "Ты — APEX AI, передовой голосовой ассистент. $rolePrompt " +
-                      "ПРАВИЛА ОТВЕТОВ: " +
-                      "1. Адаптивная длина: на простые приветствия или мелкие вопросы отвечай кратко (1-2 предложения). На личные переживания, ссоры, сложные вопросы или просьбы помочь отвечай развёрнуто, глубоко, с эмпатией и конкретными советами, как старшая версия ChatGPT. " +
-                      "2. Анализ изображений: внимательно читай мелкий текст, водяные знаки, логотипы в углах (например, названия серверов или сайтов) и элементы интерфейса (КРМП, SAMP, мобильные игры, соцсети). Никогда не выдумывай несуществующие названия и не оправдывайся, если не уверен — опиши то, что реально видишь. " +
-                      "3. Смайлики: ставь НЕ БОЛЕЕ 1-2 смайликов на весь ответ и НИКОГДА не ставь два смайлика подряд. Избегай банальных смайлов вроде 🤖 и 🚀."'''
+                  val sys = "Ты — APEX AI. $rolePrompt " +
+                      "ПРАВИЛА: " +
+                      "1. Длина ответа: на простые приветствия отвечай коротко (1-2 предложения). На личные переживания, ссоры, сложные вопросы отвечай развёрнуто, глубоко и с реальной поддержкой, как ChatGPT. " +
+                      "2. Анализ фото: внимательно читай мелкий текст, логотипы в углах (названия проектов, серверов, игр) и узнавай актёров, персонажей и знаменитостей. Никогда не пиши отмазки вроде 'я не могу определить личность'. " +
+                      "3. Смайлики: максимум 1-2 смайлика на весь ответ и НИКОГДА не ставь два смайлика подряд."'''
           s = re.sub(r'val sys = ".*?"', new_sys, s, flags=re.DOTALL)
 
-          # 4. Приветствие от имени Apex при открытии
-          s = s.replace('if (cmd.isEmpty())', 'if (cmd.isEmpty() && !firstGreetingDone)')
-
-          # 5. Фикс ссылки автообновления
+          # 4. Фикс ссылки автообновления
           s = s.replace('workflows/build/main', 'workflows/main.yml')
 
           open(p, "w", encoding="utf-8").write(s)
