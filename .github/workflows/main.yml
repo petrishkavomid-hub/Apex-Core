@@ -17,24 +17,14 @@ jobs:
 
       - name: Restore Working Base & Apply Clean Fixes
         run: |
-          git checkout bb021fd -- app/
+          git checkout bb021fd -- fix_all.py app/
+          pip install pillow -q && python3 fix_all.py
+          git checkout bb021fd -- app/src/main/res
           cat << 'EOF' > patch_apex.py
           import re
 
           p = "app/src/main/java/com/apex/assistant/MainActivity.kt"
-          lines = open(p, encoding="utf-8").readlines()
-          print("=== LINE 1570 BEFORE ===", repr(lines[1569]) if len(lines) >= 1570 else "NO_LINE")
-          s = "".join(lines)
-
-          # Фикс опечатки на 1570-й строке из bb021fd (обычно двойные кавычки или перенос внутри строки)
-          if len(lines) >= 1570:
-              bad = lines[1569]
-              # Если в строке нечетное число кавычек или лишний мусор после точки с запятой/скобки
-              fixed = re.sub(r'""([^"+])', r'"\1', bad)
-              if fixed == bad and bad.count('"') % 2 != 0:
-                  fixed = bad.rstrip('\n') + '"\n'
-              lines[1569] = fixed
-              s = "".join(lines)
+          s = open(p, encoding="utf-8").read()
 
           # 1. Фикс фото: приоритет Groq / OpenAI-Large без цензуры на лица
           s = s.replace('"model": "openai"', '"model": "groq"')
