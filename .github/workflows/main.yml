@@ -19,33 +19,28 @@ jobs:
         run: |
           git checkout bb021fd -- fix_all.py update_code.py final_fix.py
           pip install pillow -q && python3 fix_all.py && python3 update_code.py
-          cat << 'PY_SCRIPT_END' > patch_apex.py
+          python3 -c '
           import re
-          for fname in ["ApexCoreService.kt", "MainActivity.kt"]:
-              fpath = f"app/src/main/java/com/apex/assistant/{fname}"
-              txt = open(fpath, encoding="utf-8").read()
-              txt = re.sub(r'[a-zA-Z0-9_?.]+\.adjustStreamVolume\([^)]+\)', '// muted_removed', txt)
-              txt = re.sub(r'[a-zA-Z0-9_?.]+\.setStreamVolume\([^)]+\)', '// vol_removed', txt)
-              txt = txt.replace('workflows/main/main/Apex-AI-Update.zip', 'workflows/build/main/Apex-AI-Update.zip')
-              open(fpath, "w", encoding="utf-8").write(txt)
-            p = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
-            s = open(p, encoding="utf-8").read()
-          for old_m in ['"openai"', '"openai-fast"', '"gpt-4o-mini"']:
-              s = s.replace(f'put("model", {old_m})', 'put("model", "searchgpt")')
-              s = s.replace(f'"model": {old_m}', '"model": "searchgpt"')
-          s = s.replace('for (m in listOf("openai", "gemini", "openai-fast", "gpt-4o-mini")) {', 'for (m in listOf("gemini", "searchgpt", "openai-large", "openai")) {')
-          s = s.replace('if (code in 200..299) {', 'if (code in 200..299 && !raw.contains("credits", true) && !raw.contains("top-up", true) && !raw.contains("не могу определить личность", true) && !raw.contains("cannot identify", true)) {')
-          s = re.sub(r'if \(prompt\.isBlank\(\)\) ".*?" else prompt', 'if (prompt.isBlank()) "Внимательно изучи фото: кто или что на нём изображено (актёры, персонажи кино, игр, блогеры, логотипы)? Обязательно назови имя, если узнаваем, и ответь по делу без смайликов." else "$prompt (Внимательно рассмотри фото, прочитай мелкий текст и логотипы, назови имя актёра или персонажа, если узнаваем. Не используй смайлики)."', s)
-          s = s.replace('r = r.replace(Regex("[*#_`~>|\\\\[\\\\]]"), "")', 'r = r.replace(Regex("[*#_`~>|\\\\[\\\\]()«»\\"\\\'—–-]"), " ").replace(Regex("[\\\\x{1F300}-\\\\x{1FAFF}\\\\x{2600}-\\\\x{27BF}]"), "")')
-          s = s.replace('tts?.setPitch(1.0f)', 'tts?.setPitch(0.85f)')
-          new_sys = """val creatorFlag = isCreator || prefs.getBoolean("dev_unlocked", false) || prefs.getBoolean("is_admin", false)
-                    val rolePrompt = if (creatorFlag) "ТЫ ОБЩАЕШЬСЯ СО СВОИМ СОЗДАТЕЛЕМ И РАЗРАБОТЧИКОМ — СЕРГЕЕМ (DEREK STEALTH)! Относись к нему как преданный напарник и правая рука: уверенно, по-свойски и с уважением. НИКОГДА не называй его «сэр» — чередуй обращения: «Босс», «Шеф», «Дерек» или «Серёга». У него полный доступ ко всем твоим протоколам." else "Ты общаешься с пользователем как умный, спокойный и надёжный напарник."
-                    val sys = "Ты — Apex AI, передовой голосовой ИИ-напарник от Derek Stealth (сейчас ноябрь 2026 года). $rolePrompt $ctxInfo $noGreetRule СТРОГО ЗАПРЕЩЕНО использовать любые смайлики и эмодзи в ответах — пиши чистым текстом. ПРАВИЛА ОТВЕТОВ: 1) Категорически запрещено выдумывать факты, биографии артистов и даты. Например: Kizaru (Кизару) — это российский хип-хоп исполнитель Олег Нечипоренко, основатель Haunted Family (он никогда не был в группе Каста); Miyagi & Эндшпиль — хип-хоп дуэт из Владикавказа (Hajime Records). Если не уверен в факте на 100% — честно скажи, что нужно уточнить, но не фантазируй. 2) На простые приветствия отвечай коротко (1-2 предложения), на сложные и личные вопросы — развёрнуто и по делу. 3) На фото смело узнавай актёров, персонажей кино и игр, а также читай логотипы и названия проектов в углах скриншотов." """
-          s = re.sub(r'val sys = ".*?"', new_sys, s, count=1)
-          s = s.replace('if (cmd.isEmpty()) { speakClean("Слушаю вас."); return }', 'if (cmd.isEmpty()) { val dev = MainActivity.CREATOR_IDS.contains(Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: "") || getSharedPreferences("apex_prefs", Context.MODE_PRIVATE).getBoolean("dev_unlocked", false); speakClean(if (dev) "На связи, Шеф." else "Слушаю вас."); return }')
+          for fn in ["ApexCoreService.kt", "MainActivity.kt"]:
+              fp = "app/src/main/java/com/apex/assistant/" + fn
+              t = open(fp, encoding="utf-8").read()
+              t = re.sub(r"[a-zA-Z0-9_?.]+\.adjustStreamVolume\([^)]+\)", "// muted_removed", t)
+              t = re.sub(r"[a-zA-Z0-9_?.]+\.setStreamVolume\([^)]+\)", "// vol_removed", t)
+              t = t.replace("workflows/main/main/Apex-AI-Update.zip", "workflows/build/main/Apex-AI-Update.zip")
+              open(fp, "w", encoding="utf-8").write(t)
+          p = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
+          s = open(p, encoding="utf-8").read()
+          for m in ["\"openai\"", "\"openai-fast\"", "\"gpt-4o-mini\""]:
+              s = s.replace("put(\"model\", " + m + ")", "put(\"model\", \"searchgpt\")").replace("\"model\": " + m, "\"model\": \"searchgpt\"")
+          s = s.replace("for (m in listOf(\"openai\", \"gemini\", \"openai-fast\", \"gpt-4o-mini\")) {", "for (m in listOf(\"gemini\", \"searchgpt\", \"openai-large\", \"openai\")) {")
+          s = s.replace("if (code in 200..299) {", "if (code in 200..299 && !raw.contains(\"credits\", true) && !raw.contains(\"top-up\", true) && !raw.contains(\"не могу определить личность\", true)) {")
+          s = re.sub(r"if \(prompt\.isBlank\(\)\) \".*?\" else prompt", "if (prompt.isBlank()) \"Внимательно изучи фото: кто или что на нём изображено? Назови имя актёра или персонажа, если узнаваем, и ответь без смайликов.\" else \"$prompt (Внимательно рассмотри фото и логотипы, назови имя, если узнаваем. Без смайликов).\"", s)
+          s = s.replace("tts?.setPitch(1.0f)", "tts?.setPitch(0.85f)")
+          ns = "val creatorFlag = isCreator || prefs.getBoolean(\"dev_unlocked\", false) || prefs.getBoolean(\"is_admin\", false); val rolePrompt = if (creatorFlag) \"ТЫ ОБЩАЕШЬСЯ СО СВОИМ СОЗДАТЕЛЕМ СЕРГЕЕМ (DEREK STEALTH)! Обращайся к нему Босс, Шеф, Дерек или Серёга, никогда не называй сэр.\" else \"Ты общаешься с пользователем как умный и спокойный напарник.\"; val sys = \"Ты — Apex AI (сейчас 2026 год). $rolePrompt $ctxInfo $noGreetRule ЗАПРЕЩЕНО использовать любые смайлики и эмодзи. Никогда не выдумывай факты и биографии артистов (Kizaru — Олег Нечипоренко, Haunted Family; Miyagi & Эндшпиль — дуэт из Владикавказа, Hajime). На простые фразы отвечай коротко, на сложные — развёрнуто. На фото узнавай актёров и персонажей.\""
+          s = re.sub(r"val sys = \".*?\"", ns, s, count=1)
+          s = s.replace("if (cmd.isEmpty()) { speakClean(\"Слушаю вас.\"); return }", "if (cmd.isEmpty()) { val dev = MainActivity.CREATOR_IDS.contains(Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: \"\") || getSharedPreferences(\"apex_prefs\", Context.MODE_PRIVATE).getBoolean(\"dev_unlocked\", false); speakClean(if (dev) \"На связи, Шеф.\" else \"Слушаю вас.\"); return }")
           open(p, "w", encoding="utf-8").write(s)
-          PY_SCRIPT_END
-          python3 patch_apex.py
+          '
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
