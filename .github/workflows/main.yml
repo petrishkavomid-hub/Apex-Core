@@ -24,8 +24,9 @@ jobs:
           p = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
           s = open(p, encoding="utf-8").read()
 
-          # Находим имя функции запуска фонового слушателя слова "Апекс"
-          wake_fn = "startWakeWordListening" if "startWakeWordListening" in s else ("startListening" if "startListening" in s else "")
+          # Точно проверяем, объявлена ли функция запуска микрофона внутри самого ApexCoreService.kt
+          m_wake = re.search(r'fun\s+(start\w*Listen\w*)\s*\(\s*\)', s)
+          wake_fn = m_wake.group(1) if m_wake else ""
 
           # 1. Переводим И фото, И текстовый чат на модели с актуальными знаниями и поиском
           for old_m in ['"openai"', '"openai-fast"', '"gpt-4o-mini"']:
