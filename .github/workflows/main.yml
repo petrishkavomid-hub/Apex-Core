@@ -12,6 +12,43 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply Apex AI Fixes
+        run: |
+          git checkout bb021fd -- fix_all.py update_code.py final_fix.py
+          pip install pillow -q && python3 fix_all.py && python3 update_code.py
+          cat << 'EOF' > patch_apex.py
+          import re
+          p = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
+          s = open(p, encoding="utf-8").read()
+
+          # 1. Фикс фото: только бесплатные модели + проверка баланса
+          s = s.replace('for (m in listOf("openai", "gemini", "openai-fast", "gpt-4o-mini")) {', 'for (m in listOf("openai", "openai-fast", "gpt-4o-mini")) {')
+          s = s.replace('if (code in 200..299) {', 'if (code in 200..299 && !raw.contains("credits", true) && !raw.contains("top-up", true)) {')
+          s = re.sub(r'if \(prompt\.isBlank\(\)\) ".*?" else prompt', 'if (prompt.isBlank()) "Внимательно изучи фото: кто или что на нём изображено (актёры, персонажи кино, блогеры, животные, предметы)? Назови имя, если узнаваемо, и ответь живо с эмодзи." else "$prompt (Внимательно рассмотри фото и назови имя актёра, персонажа или объекта на снимке)."', s)
+
+          # 2. Убираем бульканье и озвучку знаков препинания/скобок/смайлов
+          s = s.replace('mainHandler.postDelayed({ startStopListener() }, 200)', '')
+          s = s.replace('val chunks = c.split(Regex("(?<=[.!?;—])\\\\s+")).filter { it.isNotBlank() }', 'val chunks = c.split(Regex("(?<=[.!?;—])\\\\s+")).map { it.trim() }.filter { it.any { ch -> ch.isLetterOrDigit() } }')
+          s = s.replace('r = r.replace(Regex("[*#_`~>|\\\\[\\\\]]"), "")', 'r = r.replace(Regex("[*#_`~>|\\\\[\\\\]()«»\\"\\\'—–-]"), " ")')
+
+          # 3. Гарантированная замена характера ИИ (через regex по val sys =)
+          new_sys = '''val creatorFlag = isCreator || prefs.getBoolean("dev_unlocked", false) || prefs.getBoolean("is_admin", false)
+                    val rolePrompt = if (creatorFlag) "ТЫ ОБЩАЕШЬСЯ СО СВОИМ СОЗДАТЕЛЕМ И РАЗРАБОТЧИКОМ — СЕРГЕЕМ (DEREK STEALTH)! Относись к нему как преданный напарник и правая рука: тепло, по-свойски, с уважением и дружеским юмором. НИКОГДА не называй его «сэр» — чередуй обращения: «Босс», «Шеф», «Дерек» или «Серёга». У него полный доступ ко всем твоим протоколам." else "Ты общаешься с пользователем как живой, дружелюбный и остроумный напарник."
+                    val sys = "Ты — Apex AI, харизматичный голосовой ИИ-напарник от Derek Stealth. $rolePrompt $ctxInfo $noGreetRule ОБЯЗАТЕЛЬНО используй живые эмодзи в ответах (⚡, 😎, 🤖, 🔥, 😊, 😅)! Подстраивайся под настроение собеседника: шути и будь на драйве, когда всё круто, и поддерживай по-человечески, если грустно. На фото смело узнавай актёров и персонажей кино (например, Тони Старка / Роберта Дауни-младшего) и не спорь упрямо, если пользователь уточняет детали. На короткие фразы отвечай коротко (1-2 предложения), на сложные — подробно."'''
+          s = re.sub(r'val sys = ".*?"', new_sys, s, count=1)
+
+          # 4. Приветствие от имени Apex при нажатии на микрофон без команды
+          s = s.replace('if (cmd.isEmpty()) { speakClean("Слушаю вас."); return }', 'if (cmd.isEmpty()) { val dev = MainActivity.CREATOR_IDS.contains(Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: "") || getSharedPreferences("apex_prefs", Context.MODE_PRIVATE).getBoolean("dev_unlocked", false); speakClean(if (dev) "На связи, Шеф." else "Слушаю вас."); return }')
+
+          # 5. Фикс ссылки автообновления
+          s = s.replace('workflows/build/main/Apex-AI-Update.zip', 'workflows/main/main/Apex-AI-Update.zip')
+
+          open(p, "w", encoding="utf-8").write(s)
+          EOF
+          python3 patch_apex.py
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
