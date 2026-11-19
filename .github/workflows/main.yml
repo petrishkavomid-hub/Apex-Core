@@ -15,69 +15,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Restore Working Base & Apply Clean Fixes
+      - name: Restore Original Working Version
         run: |
-          git checkout bb021fd -- fix_all.py app/
-          pip install pillow -q && python3 fix_all.py
-          git checkout bb021fd -- app/src/main/res
-          cat << 'EOF' > patch_apex.py
-          import re
-
-          p = "app/src/main/java/com/apex/assistant/MainActivity.kt"
-          s = open(p, encoding="utf-8").read()
-
-          # 1. Фикс фото: приоритет Groq / OpenAI-Large без цензуры на лица
-          s = s.replace('"model": "openai"', '"model": "groq"')
-          s = s.replace('listOf("openai", "flux", "searchgpt")', 'listOf("groq", "openai-large", "openai")')
-
-          # 2. Живой студийный голос (Onyx через Pollinations Audio) без бульканья
-          studio_tts = '''
-          private var studioPlayer: android.media.MediaPlayer? = null
-          private fun speakStudioVoice(rawText: CharSequence?) {
-              val clean = (rawText?.toString() ?: "").replace(Regex("[\\\\*#_`~]"), "")
-                  .replace(Regex("[\\\\x{1F300}-\\\\x{1FAFF}\\\\x{2600}-\\\\x{27BF}]"), "")
-                  .trim()
-              if (clean.isEmpty()) return
-              Thread {
-                  try {
-                      studioPlayer?.stop()
-                      studioPlayer?.release()
-                  } catch (_: Exception) {}
-                  try {
-                      val prompt = java.net.URLEncoder.encode("Прочитай уверенным, спокойным мужским голосом: " + clean, "UTF-8")
-                      val url = "https://pollinations.ai"
-                      val mp = android.media.MediaPlayer()
-                      mp.setDataSource(url)
-                      mp.setOnPreparedListener { it.start() }
-                      mp.setOnCompletionListener { it.release() }
-                      mp.prepareAsync()
-                      studioPlayer = mp
-                  } catch (e: Exception) {
-                      try { tts?.speak(clean, android.speech.tts.TextToSpeech.QUEUE_FLUSH, null, "apex") } catch (_: Exception) {}
-                  }
-              }.start()
-          }
-          '''
-          if "speakStudioVoice" not in s:
-              s = s.replace("override fun onCreate(", studio_tts + "\n    override fun onCreate(")
-          s = re.sub(r'tts\?\.speak\(\s*([^,]+),[^)]+\)', r'speakStudioVoice(\1)', s)
-
-          # 3. Характер, зрение и лимит смайликов
-          rules = (
-              " ПРАВИЛА ОТВЕТА: 1) На простые приветствия отвечай коротко (1-2 предложения), "
-              "а на личные переживания, ссоры и сложные вопросы — развёрнуто, глубоко и с реальной поддержкой, как ChatGPT. "
-              "2) На фото внимательно читай мелкий текст, логотипы в углах (проекты, игры, сайты) и обязательно называй известных актёров и персонажей (например, Тони Старк / Роберт Дауни-младший), никогда не пиши отмазки 'я не могу определить личность'. "
-              "3) Ставь максимум 1-2 смайлика на весь ответ и НИКОГДА не ставь два смайлика подряд."
-          )
-          s = s.replace("Ты — APEX AI", "Ты — APEX AI." + rules)
-          s = s.replace("Ты — Apex AI", "Ты — Apex AI." + rules)
-
-          # 4. Фикс ссылки автообновления
-          s = s.replace('workflows/build/main', 'workflows/main.yml')
-
-          open(p, "w", encoding="utf-8").write(s)
-          EOF
-          python3 patch_apex.py
+          git checkout bb021fd -- .
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
