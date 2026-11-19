@@ -28,8 +28,8 @@ jobs:
               txt = re.sub(r'[a-zA-Z0-9_?.]+\.setStreamVolume\([^)]+\)', '// vol_removed', txt)
               txt = txt.replace('workflows/main/main/Apex-AI-Update.zip', 'workflows/build/main/Apex-AI-Update.zip')
               open(fpath, "w", encoding="utf-8").write(txt)
-                        p = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
-          s = open(p, encoding="utf-8").read()
+            p = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
+            s = open(p, encoding="utf-8").read()
           for old_m in ['"openai"', '"openai-fast"', '"gpt-4o-mini"']:
               s = s.replace(f'put("model", {old_m})', 'put("model", "searchgpt")')
               s = s.replace(f'"model": {old_m}', '"model": "searchgpt"')
