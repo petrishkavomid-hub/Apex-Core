@@ -21,11 +21,17 @@ jobs:
           pip install pillow -q && python3 fix_all.py && python3 update_code.py
           cat << 'PY_SCRIPT_END' > patch_apex.py
           import re
-          p = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
-          s = open(p, encoding="utf-8").read()
 
-          m_wake = re.search(r'fun\s+(start\w*Listen\w*)\s*\(\s*\)', s)
-          wake_fn = m_wake.group(1) if m_wake else ""
+          for fname in ["ApexCoreService.kt", "MainActivity.kt"]:
+              fpath = f"app/src/main/java/com/apex/assistant/{fname}"
+              txt = open(fpath, encoding="utf-8").read()
+              # Полностью убираем код, который сам крутит ползунки громкости и вызывает шторку
+              txt = re.sub(r'[a-zA-Z0-9_?.]+\.adjustStreamVolume\([^)]+\)', '// muted_removed', txt)
+              txt = re.sub(r'[a-zA-Z0-9_?.]+\.setStreamVolume\([^)]+\)', '// vol_removed', txt)
+              txt = txt.replace('workflows/main/main/Apex-AI-Update.zip', 'workflows/build/main/Apex-AI-Update.zip')
+              open(fpath, "w", encoding="utf-8").write(txt)
+                        p = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
+          s = open(p, encoding="utf-8").read()
 
           # 1. Фикс моделей для фото и текстового чата
           for old_m in ['"openai"', '"openai-fast"', '"gpt-4o-mini"']:
@@ -46,120 +52,12 @@ jobs:
               s
           )
 
-          # 2. Устранение бульканья микрофона + чистый голос
-          restart_call = f"mainHandler.postDelayed({{ try {{ {wake_fn}() }} catch (_: Exception) {{}} }}, 400)" if wake_fn else ""
-          clean_voice_code = f"""
-          private var apexVoicePlayer: android.media.MediaPlayer? = null
-          private val voiceQueue = java.util.concurrent.ConcurrentLinkedQueue<String>()
-          @Volatile private var isSpeakingQueue = false
-
-          private fun muteMicBeepBriefly() {{
-              try {{
-                  val am = getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
-                  am.adjustStreamVolume(android.media.AudioManager.STREAM_NOTIFICATION, android.media.AudioManager.ADJUST_MUTE, 0)
-                  am.adjustStreamVolume(android.media.AudioManager.STREAM_SYSTEM, android.media.AudioManager.ADJUST_MUTE, 0)
-                  mainHandler.postDelayed({{
-                      try {{
-                          am.adjustStreamVolume(android.media.AudioManager.STREAM_NOTIFICATION, android.media.AudioManager.ADJUST_UNMUTE, 0)
-                          am.adjustStreamVolume(android.media.AudioManager.STREAM_SYSTEM, android.media.AudioManager.ADJUST_UNMUTE, 0)
-                      }} catch (_: Exception) {{}}
-                  }}, 350)
-              }} catch (_: Exception) {{}}
-          }}
-
-          private fun forceCleanMediaAudio() {{
-              try {{
-                  val am = getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
-                  am.mode = android.media.AudioManager.MODE_NORMAL
-                  am.isBluetoothScoOn = false
-                  am.stopBluetoothSco()
-                  am.isSpeakerphoneOn = true
-              }} catch (_: Exception) {{}}
-          }}
-
-          private fun playNextVoiceChunk() {{
-              val nextText = voiceQueue.poll()
-              if (nextText == null) {{
-                  isSpeakingQueue = false
-                  {restart_call}
-                  return
-              }}
-              isSpeakingQueue = true
-              forceCleanMediaAudio()
-              Thread {{
-                  try {{
-                      apexVoicePlayer?.stop()
-                      apexVoicePlayer?.release()
-                  }} catch (_: Exception) {{}}
-                  try {{
-                      val encoded = java.net.URLEncoder.encode(nextText.take(190), "UTF-8")
-                      val url = "https://google.com"
-                      val headers = mapOf("User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-                      val mp = android.media.MediaPlayer()
-                      mp.setAudioAttributes(
-                          android.media.AudioAttributes.Builder()
-                              .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
-                              .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
-                              .build()
-                      )
-                      mp.setDataSource(this@ApexCoreService, android.net.Uri.parse(url), headers)
-                      mp.setOnPreparedListener {{ player ->
-                          try {{
-                              if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {{
-                                  player.playbackParams = player.playbackParams.setPitch(0.87f).setSpeed(1.06f)
-                              }}
-                          }} catch (_: Exception) {{}}
-                          player.start()
-                      }}
-                      mp.setOnCompletionListener {{ player ->
-                          try {{ player.release() }} catch (_: Exception) {{}}
-                          playNextVoiceChunk()
-                      }}
-                      mp.setOnErrorListener {{ player, _, _ ->
-                          try {{ player.release() }} catch (_: Exception) {{}}
-                          playNextVoiceChunk()
-                          true
-                      }}
-                      mp.prepareAsync()
-                      apexVoicePlayer = mp
-                  }} catch (e: Exception) {{
-                      playNextVoiceChunk()
-                  }}
-              }}.start()
-          }}
-
-          private fun enqueueCleanVoice(raw: String) {{
-              mainHandler.post {{
-                  try {{ speechRecognizer?.stopListening() }} catch (_: Exception) {{}}
-                  try {{ speechRecognizer?.cancel() }} catch (_: Exception) {{}}
-                  forceCleanMediaAudio()
-              }}
-              val sentences = raw.split(Regex("(?<=[.!?])\\\\s+"))
-                  .map {{ it.trim() }}
-                  .filter {{ it.any {{ ch -> ch.isLetterOrDigit() }} }}
-              if (sentences.isEmpty()) return
-              voiceQueue.clear()
-              voiceQueue.addAll(sentences)
-              if (!isSpeakingQueue) {{
-                  playNextVoiceChunk()
-              }}
-          }}
-          """
-          if "enqueueCleanVoice" not in s:
-              s = s.replace("override fun onCreate()", clean_voice_code + "\n    override fun onCreate()")
-
-          s = re.sub(
-              r'(speechRecognizer\?\.startListening\([^)]+\))',
-              r'if (!isSpeakingQueue) { muteMicBeepBriefly(); \1 }',
-              s
-          )
-
-          s = s.replace('mainHandler.postDelayed({ startStopListener() }, 200)', '')
+          # 2. Чистка текста озвучки и понижение тембра голоса
           s = s.replace(
               'r = r.replace(Regex("[*#_`~>|\\\\[\\\\]]"), "")',
               'r = r.replace(Regex("[*#_`~>|\\\\[\\\\]()«»\\"\\\'—–-]"), " ").replace(Regex("[\\\\x{1F300}-\\\\x{1FAFF}\\\\x{2600}-\\\\x{27BF}]"), "")'
           )
-          s = re.sub(r'tts[?!.]*speak\(\s*([^,]+),[^)]+\)', r'enqueueCleanVoice(\1.toString())', s)
+          s = s.replace('tts?.setPitch(1.0f)', 'tts?.setPitch(0.85f)')
 
           # 3. Умный характер без выдумок и без смайликов
           new_sys = """val creatorFlag = isCreator || prefs.getBoolean("dev_unlocked", false) || prefs.getBoolean("is_admin", false)
@@ -172,14 +70,8 @@ jobs:
               'if (cmd.isEmpty()) { speakClean("Слушаю вас."); return }',
               'if (cmd.isEmpty()) { val dev = MainActivity.CREATOR_IDS.contains(Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: "") || getSharedPreferences("apex_prefs", Context.MODE_PRIVATE).getBoolean("dev_unlocked", false); speakClean(if (dev) "На связи, Шеф." else "Слушаю вас."); return }'
           )
-          # 5. Гарантируем рабочую ссылку автообновления во всех файлах проекта
-          s = s.replace('workflows/main/main/Apex-AI-Update.zip', 'workflows/build/main/Apex-AI-Update.zip')
-          open(p, "w", encoding="utf-8").write(s)
 
-          m_path = "app/src/main/java/com/apex/assistant/MainActivity.kt"
-          ms = open(m_path, encoding="utf-8").read()
-          ms = ms.replace('workflows/main/main/Apex-AI-Update.zip', 'workflows/build/main/Apex-AI-Update.zip')
-          open(m_path, "w", encoding="utf-8").write(ms)
+          open(p, "w", encoding="utf-8").write(s)
           PY_SCRIPT_END
           python3 patch_apex.py
 
