@@ -18,29 +18,23 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Apply All Apex AI Fixes & In-App OTA Updater
+      - name: Apply Apex AI Fixes & OTA
         run: |
           git checkout bb021fd -- fix_all.py update_code.py final_fix.py
           pip install pillow -q && python3 fix_all.py && python3 update_code.py
           python3 -c '
           import re, os
-
-          mf_path = "app/src/main/AndroidManifest.xml"
-          if os.path.exists(mf_path):
-              mf = open(mf_path, encoding="utf-8").read()
-              if "REQUEST_INSTALL_PACKAGES" not in mf:
-                  mf = mf.replace("<application", "<uses-permission android:name=\"android.permission.REQUEST_INSTALL_PACKAGES\" />\n    <application", 1)
-              if "androidx.core.content.FileProvider" not in mf:
-                  prov = "<provider android:name=\"androidx.core.content.FileProvider\" android:authorities=\"com.apex.assistant.fileprovider\" android:exported=\"false\" android:grantUriPermissions=\"true\"><meta-data android:name=\"android.support.FILE_PROVIDER_PATHS\" android:resource=\"@xml/file_paths\" /></provider>"
-                  mf = mf.replace("</application>", prov + "\n    </application>", 1)
-              open(mf_path, "w", encoding="utf-8").write(mf)
-
+          mf = open("app/src/main/AndroidManifest.xml", encoding="utf-8").read()
+          if "REQUEST_INSTALL_PACKAGES" not in mf:
+              mf = mf.replace("<application", "<uses-permission android:name=\"android.permission.REQUEST_INSTALL_PACKAGES\" />\n    <application", 1)
+          if "FileProvider" not in mf:
+              mf = mf.replace("</application>", "<provider android:name=\"androidx.core.content.FileProvider\" android:authorities=\"com.apex.assistant.fileprovider\" android:exported=\"false\" android:grantUriPermissions=\"true\"><meta-data android:name=\"android.support.FILE_PROVIDER_PATHS\" android:resource=\"@xml/file_paths\" /></provider>\n    </application>", 1)
+          open("app/src/main/AndroidManifest.xml", "w", encoding="utf-8").write(mf)
           os.makedirs("app/src/main/res/xml", exist_ok=True)
           open("app/src/main/res/xml/file_paths.xml", "w", encoding="utf-8").write("<?xml version=\"1.0\" encoding=\"utf-8\"?><paths><cache-path name=\"updates\" path=\".\" /></paths>")
 
           p = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
           s = open(p, encoding="utf-8").read()
-
           s = re.sub(r"private fun muteBeepBriefly\(\)\s*\{.*?\n    \}", "private fun muteBeepBriefly() {}", s, flags=re.DOTALL)
           s = s.replace("postJson(\"https://pollinations.ai\", pKey,", "postJson(\"https://pollinations.ai\", null,")
           s = s.replace("if (code in 200..299) {", "if (code in 200..299 && !raw.contains(\"credits\", true) && !raw.contains(\"top-up\", true)) {")
@@ -53,14 +47,13 @@ jobs:
           s = s.replace("Используй подходящие эмодзи (⚡, 😊, 🤖, 🔥) для живого общения.", "СТРОГО ЗАПРЕЩЕНО использовать любые смайлики и эмодзи в ответах — пиши чистым текстом. Никогда не выдумывай факты и биографии артистов (Kizaru — Олег Нечипоренко, Haunted Family; Miyagi & Эндшпиль — дуэт из Владикавказа, Hajime Records).")
           s = s.replace("Слушаю вас, сэр.", "На связи, Шеф.")
 
-          old_upd = re.search(r"fun checkAppUpdateDialog\(act: android\.app\.Activity\)\s*\{.*?\n        \}", s, flags=re.DOTALL)
-          new_upd = """fun checkAppUpdateDialog(act: android.app.Activity) {
+          old_u = re.search(r"fun checkAppUpdateDialog\(act: android\.app\.Activity\)\s*\{.*?\n        \}", s, flags=re.DOTALL)
+          new_u = """fun checkAppUpdateDialog(act: android.app.Activity) {
             thread {
                 try {
                     val prefs = act.getSharedPreferences("apex_prefs", Context.MODE_PRIVATE)
                     val gh = URL("https://github.com").openConnection() as HttpURLConnection
                     gh.setRequestProperty("User-Agent", "ApexAI")
-                    gh.connectTimeout = 6000; gh.readTimeout = 6000
                     if (gh.responseCode in 200..299) {
                         val rel = JSONObject(gh.inputStream.bufferedReader().use { it.readText() })
                         val tag = rel.optString("tag_name", "").trim()
@@ -69,117 +62,67 @@ jobs:
                         if (assets != null) {
                             for (i in 0 until assets.length()) {
                                 val a = assets.getJSONObject(i)
-                                if (a.optString("name", "").endsWith(".apk")) {
-                                    apkUrl = a.optString("browser_download_url", "")
-                                    break
-                                }
+                                if (a.optString("name", "").endsWith(".apk")) { apkUrl = a.optString("browser_download_url", ""); break }
                             }
                         }
                         val saved = prefs.getString("installed_release_tag", "") ?: ""
-                        if (tag.isNotEmpty() && saved.isEmpty()) {
-                            prefs.edit().putString("installed_release_tag", tag).apply()
-                        } else if (tag.isNotEmpty() && tag != saved && apkUrl.isNotEmpty()) {
+                        if (tag.isNotEmpty() && saved.isEmpty()) prefs.edit().putString("installed_release_tag", tag).apply()
+                        else if (tag.isNotEmpty() && tag != saved && apkUrl.isNotEmpty()) {
                             act.runOnUiThread {
-                                try {
-                                    AlertDialog.Builder(act)
-                                        .setTitle("Доступно обновление Apex AI")
-                                        .setMessage("Вышла новая версия (" + tag + "). Обновить прямо сейчас? Все ваши данные, аватарка и история сохранятся.")
-                                        .setCancelable(false)
-                                        .setPositiveButton("Обновить") { _, _ -> startInAppDownloadAndInstall(act, apkUrl, tag) }
-                                        .setNegativeButton("Позже", null)
-                                        .show()
-                                } catch (_: Exception) {}
+                                AlertDialog.Builder(act).setTitle("Обновление Apex AI (" + tag + ")").setMessage("Нажмите «Обновить» для установки поверх текущей версии.").setCancelable(false)
+                                    .setPositiveButton("Обновить") { _, _ -> downloadAndInstallApk(act, apkUrl, tag) }.setNegativeButton("Позже", null).show()
                             }
                         }
                     }
                 } catch (_: Exception) {}
             }
         }
-
-        private fun startInAppDownloadAndInstall(act: android.app.Activity, apkUrl: String, newTag: String) {
-            val progDialog = AlertDialog.Builder(act).setTitle("Загрузка обновления...").setMessage("Подготовка: 0%").setCancelable(false).show()
+        private fun downloadAndInstallApk(act: android.app.Activity, apkUrl: String, newTag: String) {
+            val dlg = AlertDialog.Builder(act).setTitle("Загрузка обновления...").setMessage("0%").setCancelable(false).show()
             thread {
                 try {
-                    val file = java.io.File(act.cacheDir, "apex_update.apk")
-                    if (file.exists()) file.delete()
-                    val conn = URL(apkUrl).openConnection() as HttpURLConnection
-                    conn.setRequestProperty("User-Agent", "ApexAI")
-                    conn.instanceFollowRedirects = true
-                    conn.connect()
-                    val total = conn.contentLength
-                    conn.inputStream.use { input ->
-                        java.io.FileOutputStream(file).use { output ->
-                            val buf = ByteArray(8192)
-                            var downloaded = 0
-                            var len: Int
-                            var lastPct = -1
-                            while (input.read(buf).also { len = it } != -1) {
-                                output.write(buf, 0, len)
-                                downloaded += len
-                                if (total > 0) {
-                                    val pct = (downloaded * 100L / total).toInt()
-                                    if (pct != lastPct) {
-                                        lastPct = pct
-                                        act.runOnUiThread { try { progDialog.setMessage("Загружено: " + pct + "%\nПосле установки перезапустите приложение.") } catch (_: Exception) {} }
-                                    }
-                                }
-                            }
+                    val f = java.io.File(act.cacheDir, "apex_update.apk")
+                    val c = URL(apkUrl).openConnection() as HttpURLConnection
+                    c.instanceFollowRedirects = true; c.connect()
+                    val tot = c.contentLength
+                    c.inputStream.use { inp -> java.io.FileOutputStream(f).use { out ->
+                        val b = ByteArray(8192); var d = 0; var n: Int
+                        while (inp.read(b).also { n = it } != -1) {
+                            out.write(b, 0, n); d += n
+                            if (tot > 0) act.runOnUiThread { try { dlg.setMessage("Загружено: " + (d * 100L / tot) + "%") } catch (_: Exception) {} }
                         }
-                    }
+                    }}
                     act.getSharedPreferences("apex_prefs", Context.MODE_PRIVATE).edit().putString("installed_release_tag", newTag).apply()
                     act.runOnUiThread {
-                        try { progDialog.dismiss() } catch (_: Exception) {}
-                        try {
-                            val uri = androidx.core.content.FileProvider.getUriForFile(act, "com.apex.assistant.fileprovider", file)
-                            val installIntent = Intent(Intent.ACTION_VIEW).apply {
-                                setDataAndType(uri, "application/vnd.android.package-archive")
-                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-                            }
-                            act.startActivity(installIntent)
-                        } catch (e: Exception) {
-                            android.widget.Toast.makeText(act, "Разрешите установку из этого источника в настройках", android.widget.Toast.LENGTH_LONG).show()
-                        }
+                        try { dlg.dismiss() } catch (_: Exception) {}
+                        val uri = androidx.core.content.FileProvider.getUriForFile(act, "com.apex.assistant.fileprovider", f)
+                        act.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, "application/vnd.android.package-archive").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK))
                     }
-                } catch (e: Exception) {
-                    act.runOnUiThread {
-                        try { progDialog.dismiss() } catch (_: Exception) {}
-                        android.widget.Toast.makeText(act, "Ошибка загрузки обновления", android.widget.Toast.LENGTH_SHORT).show()
-                    }
-                }
+                } catch (_: Exception) { act.runOnUiThread { try { dlg.dismiss() } catch (_: Exception) {} } }
             }
         }"""
-
-          if old_upd:
-              s = s[:old_upd.start()] + new_upd + s[old_upd.end():]
-
+          if old_u: s = s[:old_u.start()] + new_u + s[old_u.end():]
           open(p, "w", encoding="utf-8").write(s)
-          print("OTA_AND_FIXES_READY")
           '
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.2.1'
 
-      - name: Build Debug APK
-        run: gradle assembleDebug --no-daemon
+      - run: gradle assembleDebug --no-daemon
 
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: Apex-AI-Update
           path: app/build/outputs/apk/debug/app-debug.apk
 
-      - name: Publish Direct APK to GitHub Releases
-              uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
-          name: Apex AI Build #${{ github.run_number }}
           files: app/build/outputs/apk/debug/app-debug.apk
           
