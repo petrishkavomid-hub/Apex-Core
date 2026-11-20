@@ -5,9 +5,6 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -17,13 +14,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Restore UI & Download Neural Voice
+      - name: Restore Working App & Download Offline Voice
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git checkout bb021fd -- fix_all.py update_code.py final_fix.py
           pip install pillow -q && python3 fix_all.py && python3 update_code.py
-          mkdir -p app/libs app/src/main/assets/tts app/src/main/res/xml
+          mkdir -p app/libs app/src/main/assets/tts
           gh release download v1.10.35 -R k2-fsa/sherpa-onnx -p "sherpa-onnx-1.10.35.aar" -O app/libs/sherpa-onnx.aar
           zip -d app/libs/sherpa-onnx.aar "jni/x86/*" "jni/x86_64/*" "jni/armeabi-v7a/*" || true
           gh release download tts-models -R k2-fsa/sherpa-onnx -p "vits-piper-ru_RU-dmitri-medium.tar.bz2" -D /tmp/
@@ -41,35 +38,20 @@ jobs:
             grep -q "sherpa-onnx" app/build.gradle || sed -i 's/dependencies {/dependencies {\n    implementation files("libs\/sherpa-onnx.aar")/' app/build.gradle
           fi
 
-      - name: Patch ApexCoreService & In-App OTA
+      - name: Patch Voice Only (Do Not Touch Chat/Vision/Mic)
         run: |
-          cat << 'PYEND' > patch_all.py
+          cat << 'PYEND' > patch_voice_only.py
           import re
-          mf = open("app/src/main/AndroidManifest.xml", encoding="utf-8").read()
-          if "REQUEST_INSTALL_PACKAGES" not in mf:
-              mf = mf.replace("<application", '<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />\n    <application', 1)
-          if "FileProvider" not in mf:
-              mf = mf.replace("</application>", '<provider android:name="androidx.core.content.FileProvider" android:authorities="com.apex.assistant.fileprovider" android:exported="false" android:grantUriPermissions="true"><meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" /></provider>\n    </application>', 1)
-          open("app/src/main/AndroidManifest.xml", "w", encoding="utf-8").write(mf)
-          open("app/src/main/res/xml/file_paths.xml", "w", encoding="utf-8").write('<?xml version="1.0" encoding="utf-8"?><paths><cache-path name="updates" path="." /></paths>')
           p = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
           s = open(p, encoding="utf-8").read()
           s = re.sub(r"private fun muteBeepBriefly\(\)\s*\{.*?\n    \}", "private fun muteBeepBriefly() {}", s, flags=re.DOTALL)
-          s = s.replace("startListeningCycle() }, 80)", "startListeningCycle() }, 1800L)")
-          s = s.replace("startListeningCycle() }, 200)", "startListeningCycle() }, 1800L)")
-          s = s.replace("for ((r, t) in chatHistory)", "for ((r, t) in chatHistory.takeLast(10))")
-          s = s.replace('postJson("https://pollinations.ai", pKey,', 'postJson("https://pollinations.ai", null,')
-          s = s.replace("fun parseOpenAiText(raw: String): String {", 'fun parseOpenAiText(raw: String): String {\n        if (raw.contains("credits", true) || raw.contains("top-up", true) || raw.contains("pollinations.ai/top-up", true)) return String()')
-          ntts = '    private var neuralTts: com.k2fsa.sherpa.onnx.OfflineTts? = null\n    private var pcmTrack: android.media.AudioTrack? = null\n    private fun copyAssetDir(ap: String, dd: java.io.File) {\n        if (!dd.exists()) dd.mkdirs()\n        for (it in assets.list(ap) ?: emptyArray()) {\n            val sa = "$ap/$it"; val sd = java.io.File(dd, it)\n            if ((assets.list(sa)?.size ?: 0) > 0) copyAssetDir(sa, sd)\n            else if (!sd.exists()) assets.open(sa).use { i -> java.io.FileOutputStream(sd).use { o -> i.copyTo(o) } }\n        }\n    }\n    private fun initNeuralVoice() {\n        thread {\n            try {\n                val outDir = java.io.File(filesDir, "tts_v2")\n                if (!outDir.exists()) outDir.mkdirs()\n                for (fn in listOf("model.onnx", "tokens.txt")) {\n                    val dst = java.io.File(outDir, fn)\n                    if (!dst.exists() || dst.length() < 10) assets.open("tts/$fn").use { i -> java.io.FileOutputStream(dst).use { o -> i.copyTo(o) } }\n                }\n                copyAssetDir("tts/espeak-ng-data", java.io.File(outDir, "espeak-ng-data"))\n                val vits = com.k2fsa.sherpa.onnx.OfflineTtsVitsModelConfig(model = java.io.File(outDir, "model.onnx").absolutePath, tokens = java.io.File(outDir, "tokens.txt").absolutePath, dataDir = java.io.File(outDir, "espeak-ng-data").absolutePath)\n                neuralTts = com.k2fsa.sherpa.onnx.OfflineTts(config = com.k2fsa.sherpa.onnx.OfflineTtsConfig(model = com.k2fsa.sherpa.onnx.OfflineTtsModelConfig(vits = vits, numThreads = 2, provider = "cpu")))\n                ttsReady = true\n            } catch (_: Exception) {}\n        }\n    }\n    private fun speakClean(text: String) {\n        val c = cleanSpeech(text)\n        if (c.isEmpty()) { isSpeaking = false; if (isListeningActive) startListeningCycle(); return }\n        if (neuralTts == null) { initNeuralVoice(); isSpeaking = false; if (isListeningActive) startListeningCycle(); return }\n        isSpeaking = true\n        mainHandler.post { try { speechRecognizer?.cancel(); speechRecognizer?.destroy() } catch (_: Exception) {}; speechRecognizer = null }\n        thread {\n            try {\n                val audio = neuralTts?.generate(text = c, sid = 0, speed = 1.08f)\n                if (audio != null && audio.samples.isNotEmpty()) {\n                    val sr = audio.sampleRate\n                    val shorts = ShortArray(audio.samples.size) { i -> (audio.samples[i].coerceIn(-1.0f, 1.0f) * 32767f).toInt().toShort() }\n                    try { pcmTrack?.stop(); pcmTrack?.release() } catch (_: Exception) {}\n                    val track = android.media.AudioTrack.Builder()\n                        .setAudioAttributes(android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_MEDIA).setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH).build())\n                        .setAudioFormat(android.media.AudioFormat.Builder().setEncoding(android.media.AudioFormat.ENCODING_PCM_16BIT).setSampleRate(sr).setChannelMask(android.media.AudioFormat.CHANNEL_OUT_MONO).build())\n                        .setBufferSizeInBytes(shorts.size * 2).setTransferMode(android.media.AudioTrack.MODE_STATIC).build()\n                    pcmTrack = track; track.write(shorts, 0, shorts.size); track.play()\n                    Thread.sleep((shorts.size * 1000L / sr) + 250L)\n                    try { track.stop(); track.release() } catch (_: Exception) {}\n                }\n            } catch (_: Exception) {}\n            isSpeaking = false\n            if (isListeningActive) mainHandler.postDelayed({ startListeningCycle() }, 1800L)\n        }\n    }'
+          ntts = '    private var neuralTts: com.k2fsa.sherpa.onnx.OfflineTts? = null\n    private var pcmTrack: android.media.AudioTrack? = null\n    private fun copyAssetDir(ap: String, dd: java.io.File) {\n        if (!dd.exists()) dd.mkdirs()\n        for (it in assets.list(ap) ?: emptyArray()) {\n            val sa = "$ap/$it"; val sd = java.io.File(dd, it)\n            if ((assets.list(sa)?.size ?: 0) > 0) copyAssetDir(sa, sd)\n            else if (!sd.exists()) assets.open(sa).use { i -> java.io.FileOutputStream(sd).use { o -> i.copyTo(o) } }\n        }\n    }\n    private fun initNeuralVoice() {\n        thread {\n            try {\n                val outDir = java.io.File(filesDir, "tts_v2")\n                if (!outDir.exists()) outDir.mkdirs()\n                for (fn in listOf("model.onnx", "tokens.txt")) {\n                    val dst = java.io.File(outDir, fn)\n                    if (!dst.exists() || dst.length() < 10) assets.open("tts/$fn").use { i -> java.io.FileOutputStream(dst).use { o -> i.copyTo(o) } }\n                }\n                copyAssetDir("tts/espeak-ng-data", java.io.File(outDir, "espeak-ng-data"))\n                val vits = com.k2fsa.sherpa.onnx.OfflineTtsVitsModelConfig(model = java.io.File(outDir, "model.onnx").absolutePath, tokens = java.io.File(outDir, "tokens.txt").absolutePath, dataDir = java.io.File(outDir, "espeak-ng-data").absolutePath)\n                neuralTts = com.k2fsa.sherpa.onnx.OfflineTts(config = com.k2fsa.sherpa.onnx.OfflineTtsConfig(model = com.k2fsa.sherpa.onnx.OfflineTtsModelConfig(vits = vits, numThreads = 2, provider = "cpu")))\n                ttsReady = true\n            } catch (_: Exception) {}\n        }\n    }\n    private fun speakClean(text: String) {\n        val c = cleanSpeech(text)\n        if (c.isEmpty()) { isSpeaking = false; if (isListeningActive) startListeningCycle(); return }\n        if (neuralTts == null) { initNeuralVoice(); isSpeaking = false; if (isListeningActive) startListeningCycle(); return }\n        isSpeaking = true\n        mainHandler.post { try { speechRecognizer?.cancel(); speechRecognizer?.destroy() } catch (_: Exception) {}; speechRecognizer = null }\n        thread {\n            try {\n                val audio = neuralTts?.generate(text = c, sid = 0, speed = 1.08f)\n                if (audio != null && audio.samples.isNotEmpty()) {\n                    val sr = audio.sampleRate\n                    val shorts = ShortArray(audio.samples.size) { i -> (audio.samples[i].coerceIn(-1.0f, 1.0f) * 32767f).toInt().toShort() }\n                    try { pcmTrack?.stop(); pcmTrack?.release() } catch (_: Exception) {}\n                    val track = android.media.AudioTrack.Builder()\n                        .setAudioAttributes(android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_MEDIA).setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH).build())\n                        .setAudioFormat(android.media.AudioFormat.Builder().setEncoding(android.media.AudioFormat.ENCODING_PCM_16BIT).setSampleRate(sr).setChannelMask(android.media.AudioFormat.CHANNEL_OUT_MONO).build())\n                        .setBufferSizeInBytes(shorts.size * 2).setTransferMode(android.media.AudioTrack.MODE_STATIC).build()\n                    pcmTrack = track; track.write(shorts, 0, shorts.size); track.play()\n                    Thread.sleep((shorts.size * 1000L / sr) + 250L)\n                    try { track.stop(); track.release() } catch (_: Exception) {}\n                }\n            } catch (_: Exception) {}\n            isSpeaking = false\n            if (isListeningActive) mainHandler.postDelayed({ startListeningCycle() }, 1500L)\n        }\n    }'
           if "override fun onCreate()" in s and "initNeuralVoice()" not in s:
               s = s.replace("override fun onCreate() {", "override fun onCreate() {\n        initNeuralVoice()")
           s = re.sub(r"    private fun speakClean\(text: String\) \{.*?    private fun startListeningCycle\(\)", ntts + "\n\n    private fun startListeningCycle()", s, flags=re.DOTALL)
-          s = s.replace("с эмодзи, без отказов про распознавание лиц.", "строго без смайликов и эмодзи, без отказов про распознавание лиц.")
-          s = s.replace("Используй подходящие эмодзи (⚡, 😊, 🤖, 🔥) для живого общения.", "СТРОГО ЗАПРЕЩЕНО использовать любые смайлики и эмодзи в ответах — пиши чистым текстом. Никогда не выдумывай факты и биографии артистов.")
-          s = s.replace("Слушаю вас, сэр.", "На связи, Шеф.")
           open(p, "w", encoding="utf-8").write(s)
           PYEND
-          python3 patch_all.py
+          python3 patch_voice_only.py
 
       - uses: actions/setup-java@v4
         with:
@@ -83,8 +65,4 @@ jobs:
         with:
           name: Apex-AI-Update
           path: app/build/outputs/apk/debug/app-debug.apk
-      - uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v1.0.${{ github.run_number }}
-          files: app/build/outputs/apk/debug/app-debug.apk
           
