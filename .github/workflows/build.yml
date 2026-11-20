@@ -48,16 +48,22 @@ jobs:
           p = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
           s = open(p, encoding="utf-8").read()
 
-          # 1. Безопасно отключаем фоновый цикл бульканья микрофона
+          # 1. Полностью убираем фоновое бульканье: отключаем автостарт цикла микрофона в фоне и при ошибках тишины
           s = re.sub(r"private fun muteBeepBriefly\(\)\s*\{.*?\n    \}", "private fun muteBeepBriefly() {}", s, flags=re.DOTALL)
-          s = s.replace("private fun startListeningCycle() {", "private fun startListeningCycle() { if (!isListeningActive) return;")
+          s = s.replace("isListeningActive = true", "isListeningActive = false")
+          s = s.replace("if (isListeningActive) startListeningCycle()", "// no_bg_listen")
+          s = s.replace("if (isListeningActive) mainHandler.postDelayed({ startListeningCycle() }, 1500L)", "// no_bg_listen")
+          s = s.replace("if (isListeningActive) mainHandler.postDelayed({ startListeningCycle() }, 80)", "// no_bg_listen")
+          s = s.replace("if (isListeningActive) mainHandler.postDelayed({ startListeningCycle() }, 200)", "// no_bg_listen")
 
-          # 2. Убираем "Серверы временно перегружены": подключаем бесплатный открытый пул Pollinations без ключа
+          # 2. Убираем сообщение про нехватку кредитов Pollinations и переводим на бесплатный пул без ключа
           s = s.replace("for ((r, t) in chatHistory)", "for ((r, t) in chatHistory.takeLast(10))")
-          fallback_fix = """if (reply.isBlank()) {
+          s = s.replace('postJson("https://pollinations.ai", pKey,', 'postJson("https://pollinations.ai", null,')
+          credit_guard = """if (reply.contains("credits", true) || reply.contains("top-up", true) || reply.contains("pollinations.ai", true)) reply = ""
+                if (reply.isBlank()) {
                     try {
                         val encPrompt = java.net.URLEncoder.encode(sys + "\\nПользователь: " + userMsg, "UTF-8")
-                        val u = java.net.URL("https://pollinations.ai" + encPrompt + "?model=openai")
+                        val u = java.net.URL("https://text.pollinations.ai/" + encPrompt + "?model=openai")
                         val c = u.openConnection() as java.net.HttpURLConnection
                         c.connectTimeout = 12000; c.readTimeout = 15000
                         if (c.responseCode in 200..299) {
@@ -67,7 +73,7 @@ jobs:
                     } catch (_: Exception) {}
                 }
                 if (reply.isBlank()) {"""
-          s = s.replace("if (reply.isBlank()) {", fallback_fix, 1)
+          s = s.replace("if (reply.isBlank()) {", credit_guard, 1)
 
           # 3. Нейросетевой офлайн-голос Sherpa-ONNX (Piper Dmitri)
           neural_tts = """    private var neuralTts: com.k2fsa.sherpa.onnx.OfflineTts? = null
@@ -144,7 +150,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: Apex-AI-Update
-          path: app/build/outputs/apk/debug/app-debug.apk
+                    path: app/build/outputs/apk/debug/app-debug.apk
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
