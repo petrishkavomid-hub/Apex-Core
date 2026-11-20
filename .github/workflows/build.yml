@@ -25,6 +25,7 @@ jobs:
           pip install pillow -q && python3 fix_all.py && python3 update_code.py
           mkdir -p app/libs app/src/main/assets/tts
           gh release download v1.10.35 -R k2-fsa/sherpa-onnx -p "sherpa-onnx-1.10.35.aar" -O app/libs/sherpa-onnx.aar
+          zip -d app/libs/sherpa-onnx.aar "jni/x86/*" "jni/x86_64/*" "jni/armeabi-v7a/*" || true
           gh release download tts-models -R k2-fsa/sherpa-onnx -p "vits-piper-ru_RU-dmitri-medium.tar.bz2" -D /tmp/
           tar -xjf /tmp/vits-piper-ru_RU-dmitri-medium.tar.bz2 -C /tmp/
           cp /tmp/vits-piper-ru_RU-*/*.onnx app/src/main/assets/tts/model.onnx
