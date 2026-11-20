@@ -22,129 +22,108 @@ jobs:
         run: |
           git checkout bb021fd -- fix_all.py update_code.py final_fix.py
           pip install pillow -q && python3 fix_all.py && python3 update_code.py
-
-          # Скачиваем официальный движок Sherpa-ONNX (AAR) и нейросетевую русскую мужскую модель Piper (Dmitri) прямо в проект
           mkdir -p app/libs app/src/main/assets/tts
           curl -L -s "https://github.com" -o app/libs/sherpa-onnx.aar
           curl -L -s "https://huggingface.co" -o app/src/main/assets/tts/model.onnx
           curl -L -s "https://huggingface.co.json" -o app/src/main/assets/tts/model.onnx.json
-
-          # Подключаем sherpa-onnx.aar в app/build.gradle
           if ! grep -q "sherpa-onnx.aar" app/build.gradle; then
             sed -i 's/dependencies {/dependencies {\n    implementation files("libs\/sherpa-onnx.aar")/' app/build.gradle
           fi
 
-      - name: Patch ApexCoreService (Offline Neural Voice + Fast Groq)
+      - name: Patch ApexCoreService
         run: |
-          python3 -c '
+          cat << 'PYEND' > patch_voice.py
           import re
-
           p = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
           s = open(p, encoding="utf-8").read()
-
-          # 1. Убираем дёрганье громкости
           s = re.sub(r"private fun muteBeepBriefly\(\)\s*\{.*?\n    \}", "private fun muteBeepBriefly() {}", s, flags=re.DOTALL)
-
-          # 2. Чиним сервера: оставляем быстрый Groq на первом месте, убираем сломанный text.pollinations.ai
-          s = s.replace("if (code in 200..299) {", "if (code in 200..299 && !raw.contains(\"credits\", true) && !raw.contains(\"top-up\", true)) {")
-          s = s.replace("if (fCode in 200..299) {", "if (fCode in 200..299 && !fRaw.contains(\"credits\", true) && !fRaw.contains(\"top-up\", true)) {")
+          s = s.replace('if (code in 200..299) {', 'if (code in 200..299 && !raw.contains("credits", true) && !raw.contains("top-up", true)) {')
+          s = s.replace('if (fCode in 200..299) {', 'if (fCode in 200..299 && !fRaw.contains("credits", true) && !fRaw.contains("top-up", true)) {')
           s = s.replace("for ((r, t) in chatHistory)", "for ((r, t) in chatHistory.takeLast(10))")
-
-          # 3. Заменяем булькающий Android TTS на встроенный нейросетевой офлайн-голос Sherpa-ONNX (Piper Dmitri)
           neural_tts_block = """    private var neuralTts: com.k2fsa.sherpa.onnx.OfflineTts? = null
-    private var pcmTrack: android.media.AudioTrack? = null
+              private var pcmTrack: android.media.AudioTrack? = null
 
-    private fun initNeuralVoice() {
-        thread {
-            try {
-                val outDir = java.io.File(filesDir, "tts_v1")
-                if (!outDir.exists()) outDir.mkdirs()
-                for (fn in listOf("model.onnx", "model.onnx.json")) {
-                    val dst = java.io.File(outDir, fn)
-                    if (!dst.exists() || dst.length() < 100) {
-                        assets.open("tts/$fn").use { inp -> java.io.FileOutputStream(dst).use { out -> inp.copyTo(out) } }
-                    }
-                }
-                val vits = com.k2fsa.sherpa.onnx.OfflineTtsVitsModelConfig(
-                    model = java.io.File(outDir, "model.onnx").absolutePath,
-                    tokens = java.io.File(outDir, "model.onnx.json").absolutePath
-                )
-                val modelCfg = com.k2fsa.sherpa.onnx.OfflineTtsModelConfig(vits = vits, numThreads = 2, provider = "cpu")
-                val cfg = com.k2fsa.sherpa.onnx.OfflineTtsConfig(model = modelCfg)
-                neuralTts = com.k2fsa.sherpa.onnx.OfflineTts(config = cfg)
-                ttsReady = true
-            } catch (e: Exception) {
-                android.util.Log.e("ApexTTS", "Neural init err", e)
-            }
-        }
-    }
+              private fun initNeuralVoice() {
+                  thread {
+                      try {
+                          val outDir = java.io.File(filesDir, "tts_v1")
+                          if (!outDir.exists()) outDir.mkdirs()
+                          for (fn in listOf("model.onnx", "model.onnx.json")) {
+                              val dst = java.io.File(outDir, fn)
+                              if (!dst.exists() || dst.length() < 100) {
+                                  assets.open("tts/$fn").use { inp -> java.io.FileOutputStream(dst).use { out -> inp.copyTo(out) } }
+                              }
+                          }
+                          val vits = com.k2fsa.sherpa.onnx.OfflineTtsVitsModelConfig(
+                              model = java.io.File(outDir, "model.onnx").absolutePath,
+                              tokens = java.io.File(outDir, "model.onnx.json").absolutePath
+                          )
+                          val modelCfg = com.k2fsa.sherpa.onnx.OfflineTtsModelConfig(vits = vits, numThreads = 2, provider = "cpu")
+                          val cfg = com.k2fsa.sherpa.onnx.OfflineTtsConfig(model = modelCfg)
+                          neuralTts = com.k2fsa.sherpa.onnx.OfflineTts(config = cfg)
+                          ttsReady = true
+                      } catch (e: Exception) {
+                          android.util.Log.e("ApexTTS", "Neural init err", e)
+                      }
+                  }
+              }
 
-    private fun speakClean(text: String) {
-        val c = cleanSpeech(text)
-        if (c.isEmpty()) { isSpeaking = false; if (isListeningActive) startListeningCycle(); return }
-        if (neuralTts == null) { initNeuralVoice(); isSpeaking = false; if (isListeningActive) startListeningCycle(); return }
-        isSpeaking = true
-        mainHandler.post {
-            try { speechRecognizer?.cancel(); speechRecognizer?.destroy() } catch (_: Exception) {}
-            speechRecognizer = null
-        }
-        thread {
-            try {
-                val audio = neuralTts?.generate(text = c, sid = 0, speed = 1.08f)
-                if (audio != null && audio.samples.isNotEmpty()) {
-                    val sr = audio.sampleRate
-                    val shorts = ShortArray(audio.samples.size) { i ->
-                        (audio.samples[i].coerceIn(-1.0f, 1.0f) * 32767f).toInt().toShort()
-                    }
-                    try { pcmTrack?.stop(); pcmTrack?.release() } catch (_: Exception) {}
-                    val track = android.media.AudioTrack.Builder()
-                        .setAudioAttributes(
-                            android.media.AudioAttributes.Builder()
-                                .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
-                                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
-                                .build()
-                        )
-                        .setAudioFormat(
-                            android.media.AudioFormat.Builder()
-                                .setEncoding(android.media.AudioFormat.ENCODING_PCM_16BIT)
-                                .setSampleRate(sr)
-                                .setChannelMask(android.media.AudioFormat.CHANNEL_OUT_MONO)
-                                .build()
-                        )
-                        .setBufferSizeInBytes(shorts.size * 2)
-                        .setTransferMode(android.media.AudioTrack.MODE_STATIC)
-                        .build()
-                    pcmTrack = track
-                    track.write(shorts, 0, shorts.size)
-                    track.play()
-                    val durationMs = (shorts.size * 1000L / sr) + 250L
-                    Thread.sleep(durationMs)
-                    try { track.stop(); track.release() } catch (_: Exception) {}
-                }
-            } catch (_: Exception) {}
-            isSpeaking = false
-            if (isListeningActive) mainHandler.postDelayed({ startListeningCycle() }, 1500L)
-        }
-    }"""
-
+              private fun speakClean(text: String) {
+                  val c = cleanSpeech(text)
+                  if (c.isEmpty()) { isSpeaking = false; if (isListeningActive) startListeningCycle(); return }
+                  if (neuralTts == null) { initNeuralVoice(); isSpeaking = false; if (isListeningActive) startListeningCycle(); return }
+                  isSpeaking = true
+                  mainHandler.post {
+                      try { speechRecognizer?.cancel(); speechRecognizer?.destroy() } catch (_: Exception) {}
+                      speechRecognizer = null
+                  }
+                  thread {
+                      try {
+                          val audio = neuralTts?.generate(text = c, sid = 0, speed = 1.08f)
+                          if (audio != null && audio.samples.isNotEmpty()) {
+                              val sr = audio.sampleRate
+                              val shorts = ShortArray(audio.samples.size) { i ->
+                                  (audio.samples[i].coerceIn(-1.0f, 1.0f) * 32767f).toInt().toShort()
+                              }
+                              try { pcmTrack?.stop(); pcmTrack?.release() } catch (_: Exception) {}
+                              val track = android.media.AudioTrack.Builder()
+                                  .setAudioAttributes(
+                                      android.media.AudioAttributes.Builder()
+                                          .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                                          .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+                                          .build()
+                                  )
+                                  .setAudioFormat(
+                                      android.media.AudioFormat.Builder()
+                                          .setEncoding(android.media.AudioFormat.ENCODING_PCM_16BIT)
+                                          .setSampleRate(sr)
+                                          .setChannelMask(android.media.AudioFormat.CHANNEL_OUT_MONO)
+                                          .build()
+                                  )
+                                  .setBufferSizeInBytes(shorts.size * 2)
+                                  .setTransferMode(android.media.AudioTrack.MODE_STATIC)
+                                  .build()
+                              pcmTrack = track
+                              track.write(shorts, 0, shorts.size)
+                              track.play()
+                              val durationMs = (shorts.size * 1000L / sr) + 250L
+                              Thread.sleep(durationMs)
+                              try { track.stop(); track.release() } catch (_: Exception) {}
+                          }
+                      } catch (_: Exception) {}
+                      isSpeaking = false
+                      if (isListeningActive) mainHandler.postDelayed({ startListeningCycle() }, 1500L)
+                  }
+              }"""
           if "override fun onCreate()" in s and "initNeuralVoice()" not in s:
               s = s.replace("override fun onCreate() {", "override fun onCreate() {\n        initNeuralVoice()")
-
-          s = re.sub(
-              r"    private fun speakClean\(text: String\) \{.*?    private fun startListeningCycle\(\)",
-              neural_tts_block + "\n\n    private fun startListeningCycle()",
-              s,
-              flags=re.DOTALL
-          )
-
-          # 4. Убираем смайлики и выдумки про артистов + обращение Шеф
+          s = re.sub(r"    private fun speakClean\(text: String\) \{.*?    private fun startListeningCycle\(\)", neural_tts_block + "\n\n    private fun startListeningCycle()", s, flags=re.DOTALL)
           s = s.replace("с эмодзи, без отказов про распознавание лиц.", "строго без смайликов и эмодзи, без отказов про распознавание лиц.")
           s = s.replace("Используй подходящие эмодзи (⚡, 😊, 🤖, 🔥) для живого общения.", "СТРОГО ЗАПРЕЩЕНО использовать любые смайлики и эмодзи в ответах — пиши чистым текстом. Никогда не выдумывай факты и биографии артистов (Kizaru — Олег Нечипоренко, Haunted Family; Miyagi & Эндшпиль — дуэт из Владикавказа, Hajime Records).")
           s = s.replace("Слушаю вас, сэр.", "На связи, Шеф.")
-
           open(p, "w", encoding="utf-8").write(s)
-          print("NEURAL_VOICE_PATCH_OK")
-          '
+          PYEND
+          python3 patch_voice.py
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
