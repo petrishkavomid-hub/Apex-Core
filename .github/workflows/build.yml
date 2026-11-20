@@ -44,10 +44,9 @@ jobs:
           p = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
           s = open(p, encoding="utf-8").read()
 
-          # 1. Полностью отключаем фоновый цикл бульканья микрофона
+          # 1. Безопасно отключаем фоновый цикл бульканья микрофона без поломки выражений Kotlin
           s = re.sub(r"private fun muteBeepBriefly\(\)\s*\{.*?\n    \}", "private fun muteBeepBriefly() {}", s, flags=re.DOTALL)
-          s = s.replace("isListeningActive = true", "isListeningActive = false")
-          s = re.sub(r"mainHandler\.postDelayed\(\{\s*startListeningCycle\(\)\s*\},\s*\d+L?\)", "// no_mic_loop", s)
+          s = s.replace("private fun startListeningCycle() {", "private fun startListeningCycle() { if (!isListeningActive) return;")
 
           # 2. Убираем "Серверы временно перегружены": подключаем бесплатный открытый пул Pollinations без ключа
           s = s.replace("for ((r, t) in chatHistory)", "for ((r, t) in chatHistory.takeLast(10))")
