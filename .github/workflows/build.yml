@@ -40,7 +40,8 @@ jobs:
           else
             grep -q "sherpa-onnx" app/build.gradle || sed -i 's/dependencies {/dependencies {\n    implementation files("libs\/sherpa-onnx.aar")/' app/build.gradle
           fi
-                - name: Patch ApexCoreService & In-App OTA
+
+      - name: Patch ApexCoreService & In-App OTA
         run: |
           cat << 'PYEND' > patch_all.py
           import re
