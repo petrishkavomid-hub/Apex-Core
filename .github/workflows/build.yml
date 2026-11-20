@@ -31,6 +31,10 @@ jobs:
           cp /tmp/vits-piper-ru_RU-*/*.onnx app/src/main/assets/tts/model.onnx
           cp /tmp/vits-piper-ru_RU-*/tokens.txt app/src/main/assets/tts/tokens.txt
           cp -r /tmp/vits-piper-ru_RU-*/espeak-ng-data app/src/main/assets/tts/espeak-ng-data
+          find app/src/main/assets/tts/espeak-ng-data/lang -mindepth 1 ! -name "ru*" ! -name "en*" -exec rm -rf {} + || true
+          find app/src/main/assets/tts/espeak-ng-data/voices -mindepth 1 ! -name "*ru*" ! -name "*en*" -exec rm -rf {} + || true
+          rm -rf app/src/main/assets/tts/espeak-ng-data/*_dict || true
+          cp /tmp/vits-piper-ru_RU-*/espeak-ng-data/ru_dict /tmp/vits-piper-ru_RU-*/espeak-ng-data/en_dict app/src/main/assets/tts/espeak-ng-data/ || true
           if [ -f "app/build.gradle.kts" ]; then
             grep -q "sherpa-onnx" app/build.gradle.kts || sed -i 's/dependencies {/dependencies {\n    implementation(files("libs\/sherpa-onnx.aar"))/' app/build.gradle.kts
           else
@@ -44,7 +48,7 @@ jobs:
           p = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
           s = open(p, encoding="utf-8").read()
 
-          # 1. Безопасно отключаем фоновый цикл бульканья микрофона без поломки выражений Kotlin
+          # 1. Безопасно отключаем фоновый цикл бульканья микрофона
           s = re.sub(r"private fun muteBeepBriefly\(\)\s*\{.*?\n    \}", "private fun muteBeepBriefly() {}", s, flags=re.DOTALL)
           s = s.replace("private fun startListeningCycle() {", "private fun startListeningCycle() { if (!isListeningActive) return;")
 
