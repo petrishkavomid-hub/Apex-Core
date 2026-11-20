@@ -21,35 +21,33 @@ jobs:
           python3 -c '
           import re
 
-          for fn in ["ApexCoreService.kt", "MainActivity.kt"]:
-              fp = "app/src/main/java/com/apex/assistant/" + fn
-              t = open(fp, encoding="utf-8").read()
-              # 1. Вырезаем дёрганье громкости и шторки
-              t = re.sub(r"[a-zA-Z0-9_?.]+\.adjustStreamVolume\([^)]+\)", "", t)
-              t = re.sub(r"[a-zA-Z0-9_?.]+\.setStreamVolume\([^)]+\)", "", t)
-              t = t.replace("muteBeepBriefly()", "")
-              # 2. Гарантируем рабочую ссылку автообновления на build.yml
-              t = t.replace("workflows/main/main/Apex-AI-Update.zip", "workflows/build/main/Apex-AI-Update.zip")
-              open(fp, "w", encoding="utf-8").write(t)
-
           p = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
           s = open(p, encoding="utf-8").read()
 
-          # 3. Бесконечный чат: отправляем в нейросеть только последние 10 сообщений контекста (лимит токенов не сработает)
+          # 1. Безопасно отключаем функцию дёрганья громкости целиком без поломки скобок Kotlin
+          s = re.sub(r"private fun muteBeepBriefly\(\)\s*\{.*?\n    \}", "private fun muteBeepBriefly() {}", s, flags=re.DOTALL)
+
+          # 2. Бесконечный чат: отправляем в нейросеть только последние 10 сообщений контекста
           s = s.replace("for ((r, t) in chatHistory)", "for ((r, t) in chatHistory.takeLast(10))")
 
-          # 4. Убираем частый перезапуск микрофона (меняем 80/1500мс на спокойные 2500мс, чтобы не булькал)
+          # 3. Убираем частый перезапуск микрофона (меняем 80/1500мс на спокойные 2500мс)
           s = s.replace("startListeningCycle() }, 1500L)", "startListeningCycle() }, 2500L)")
           s = s.replace("startListeningCycle() }, 80)", "startListeningCycle() }, 2500L)")
           s = s.replace("startListeningCycle() }, 200)", "startListeningCycle() }, 2500L)")
 
-          # 5. Запрет на смайлики и выдумки про артистов + обращение "Шеф" вместо "сэр"
+          # 4. Запрет на смайлики и выдумки про артистов + обращение "Шеф"
           s = s.replace("с эмодзи, без отказов про распознавание лиц.", "строго без смайликов и эмодзи, без отказов про распознавание лиц.")
           s = s.replace("Используй подходящие эмодзи (⚡, 😊, 🤖, 🔥) для живого общения.", "СТРОГО ЗАПРЕЩЕНО использовать любые смайлики и эмодзи в ответах — пиши чистым текстом. Никогда не выдумывай факты и биографии артистов (Kizaru — Олег Нечипоренко, Haunted Family; Miyagi & Эндшпиль — дуэт из Владикавказа, Hajime Records).")
           s = s.replace("Слушаю вас, сэр.", "На связи, Шеф.")
+          s = s.replace("workflows/main/main/Apex-AI-Update.zip", "workflows/build/main/Apex-AI-Update.zip")
 
           open(p, "w", encoding="utf-8").write(s)
-          print("BUGFIXES_APPLIED_OK")
+
+          mp = "app/src/main/java/com/apex/assistant/MainActivity.kt"
+          ms = open(mp, encoding="utf-8").read()
+          ms = ms.replace("workflows/main/main/Apex-AI-Update.zip", "workflows/build/main/Apex-AI-Update.zip")
+          open(mp, "w", encoding="utf-8").write(ms)
+          print("CLEAN_PATCH_OK")
           '
 
       - name: Set up JDK 17
