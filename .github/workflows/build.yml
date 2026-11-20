@@ -29,10 +29,13 @@ jobs:
           cp /tmp/vits-piper-ru_RU-*/*.onnx app/src/main/assets/tts/model.onnx
           cp /tmp/vits-piper-ru_RU-*/tokens.txt app/src/main/assets/tts/tokens.txt
           cp -r /tmp/vits-piper-ru_RU-*/espeak-ng-data app/src/main/assets/tts/espeak-ng-data
+          if [ -f "settings.gradle.kts" ]; then
+            grep -q "jitpack" settings.gradle.kts || sed -i 's/mavenCentral()/mavenCentral()\n        maven("https:\/\/jitpack.io")/' settings.gradle.kts
+          fi
           if [ -f "app/build.gradle.kts" ]; then
-            grep -q "sherpa-onnx" app/build.gradle.kts || sed -i 's/dependencies {/dependencies {\n    implementation("com.k2fsa.sherpa.onnx:sherpa-onnx:1.12.20")/' app/build.gradle.kts
+            grep -q "sherpa-onnx" app/build.gradle.kts || sed -i 's/dependencies {/dependencies {\n    implementation("com.github.k2-fsa:sherpa-onnx:v1.12.20")/' app/build.gradle.kts
           else
-            grep -q "sherpa-onnx" app/build.gradle || sed -i 's/dependencies {/dependencies {\n    implementation "com.k2fsa.sherpa.onnx:sherpa-onnx:1.12.20"/' app/build.gradle
+            grep -q "sherpa-onnx" app/build.gradle || sed -i 's/dependencies {/dependencies {\n    implementation "com.github.k2-fsa:sherpa-onnx:v1.12.20"/' app/build.gradle
           fi
 
       - name: Patch ApexCoreService
