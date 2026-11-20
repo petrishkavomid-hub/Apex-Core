@@ -22,23 +22,23 @@ jobs:
         run: |
           git checkout bb021fd -- fix_all.py update_code.py final_fix.py
           pip install pillow -q && python3 fix_all.py && python3 update_code.py
-          python3 -c '
+          cat << 'EOF' > fix_ota.py
           import re, os
           mf = open("app/src/main/AndroidManifest.xml", encoding="utf-8").read()
           if "REQUEST_INSTALL_PACKAGES" not in mf:
-              mf = mf.replace("<application", "<uses-permission android:name=\"android.permission.REQUEST_INSTALL_PACKAGES\" />\n    <application", 1)
+              mf = mf.replace("<application", '<uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />\n    <application', 1)
           if "FileProvider" not in mf:
-              mf = mf.replace("</application>", "<provider android:name=\"androidx.core.content.FileProvider\" android:authorities=\"com.apex.assistant.fileprovider\" android:exported=\"false\" android:grantUriPermissions=\"true\"><meta-data android:name=\"android.support.FILE_PROVIDER_PATHS\" android:resource=\"@xml/file_paths\" /></provider>\n    </application>", 1)
+              mf = mf.replace("</application>", '<provider android:name="androidx.core.content.FileProvider" android:authorities="com.apex.assistant.fileprovider" android:exported="false" android:grantUriPermissions="true"><meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" /></provider>\n    </application>', 1)
           open("app/src/main/AndroidManifest.xml", "w", encoding="utf-8").write(mf)
           os.makedirs("app/src/main/res/xml", exist_ok=True)
-          open("app/src/main/res/xml/file_paths.xml", "w", encoding="utf-8").write("<?xml version=\"1.0\" encoding=\"utf-8\"?><paths><cache-path name=\"updates\" path=\".\" /></paths>")
+          open("app/src/main/res/xml/file_paths.xml", "w", encoding="utf-8").write('<?xml version="1.0" encoding="utf-8"?><paths><cache-path name="updates" path="." /></paths>')
 
           p = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
           s = open(p, encoding="utf-8").read()
           s = re.sub(r"private fun muteBeepBriefly\(\)\s*\{.*?\n    \}", "private fun muteBeepBriefly() {}", s, flags=re.DOTALL)
-          s = s.replace("postJson(\"https://pollinations.ai\", pKey,", "postJson(\"https://pollinations.ai\", null,")
-          s = s.replace("if (code in 200..299) {", "if (code in 200..299 && !raw.contains(\"credits\", true) && !raw.contains(\"top-up\", true)) {")
-          s = s.replace("if (fCode in 200..299) {", "if (fCode in 200..299 && !fRaw.contains(\"credits\", true) && !fRaw.contains(\"top-up\", true)) {")
+          s = s.replace('postJson("https://pollinations.ai", pKey,', 'postJson("https://pollinations.ai", null,')
+          s = s.replace('if (code in 200..299) {', 'if (code in 200..299 && !raw.contains("credits", true) && !raw.contains("top-up", true)) {')
+          s = s.replace('if (fCode in 200..299) {', 'if (fCode in 200..299 && !fRaw.contains("credits", true) && !fRaw.contains("top-up", true)) {')
           s = s.replace("for ((r, t) in chatHistory)", "for ((r, t) in chatHistory.takeLast(10))")
           s = s.replace("startListeningCycle() }, 1500L)", "startListeningCycle() }, 2500L)")
           s = s.replace("startListeningCycle() }, 80)", "startListeningCycle() }, 2500L)")
@@ -103,7 +103,8 @@ jobs:
         }"""
           if old_u: s = s[:old_u.start()] + new_u + s[old_u.end():]
           open(p, "w", encoding="utf-8").write(s)
-          '
+          EOF
+          python3 fix_ota.py
 
       - uses: actions/setup-java@v4
         with:
