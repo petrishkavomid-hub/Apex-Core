@@ -23,15 +23,13 @@ jobs:
         run: |
           git checkout bb021fd -- fix_all.py update_code.py final_fix.py
           pip install pillow -q && python3 fix_all.py && python3 update_code.py
-          mkdir -p app/libs app/src/main/assets/tts
-          gh release download -R k2-fsa/sherpa-onnx -p "*.aar" -D app/libs/
-          mv app/libs/*.aar app/libs/sherpa-onnx.aar
+          mkdir -p app/src/main/assets/tts
           gh release download tts-models -R k2-fsa/sherpa-onnx -p "vits-piper-ru_RU-dmitri-medium.tar.bz2" -D /tmp/
           tar -xjf /tmp/vits-piper-ru_RU-dmitri-medium.tar.bz2 -C /tmp/
           cp /tmp/vits-piper-ru_RU-*/*.onnx app/src/main/assets/tts/model.onnx
           cp /tmp/vits-piper-ru_RU-*/tokens.txt app/src/main/assets/tts/tokens.txt
           cp -r /tmp/vits-piper-ru_RU-*/espeak-ng-data app/src/main/assets/tts/espeak-ng-data
-          grep -q "sherpa-onnx.aar" app/build.gradle || sed -i 's/dependencies {/dependencies {\n    implementation files("libs\/sherpa-onnx.aar")/' app/build.gradle
+          grep -q "sherpa-onnx" app/build.gradle || sed -i 's/dependencies {/dependencies {\n    implementation "com.k2fsa.sherpa.onnx:sherpa-onnx:1.12.20"/' app/build.gradle
 
       - name: Patch ApexCoreService
         run: |
