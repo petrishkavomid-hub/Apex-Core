@@ -43,10 +43,30 @@ jobs:
           import re
           p = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
           s = open(p, encoding="utf-8").read()
+
+          # 1. Полностью отключаем фоновый цикл бульканья микрофона
           s = re.sub(r"private fun muteBeepBriefly\(\)\s*\{.*?\n    \}", "private fun muteBeepBriefly() {}", s, flags=re.DOTALL)
-          s = s.replace('if (code in 200..299) {', 'if (code in 200..299 && !raw.contains("credits", true) && !raw.contains("top-up", true)) {')
-          s = s.replace('if (fCode in 200..299) {', 'if (fCode in 200..299 && !fRaw.contains("credits", true) && !fRaw.contains("top-up", true)) {')
+          s = s.replace("isListeningActive = true", "isListeningActive = false")
+          s = re.sub(r"mainHandler\.postDelayed\(\{\s*startListeningCycle\(\)\s*\},\s*\d+L?\)", "// no_mic_loop", s)
+
+          # 2. Убираем "Серверы временно перегружены": подключаем бесплатный открытый пул Pollinations без ключа
           s = s.replace("for ((r, t) in chatHistory)", "for ((r, t) in chatHistory.takeLast(10))")
+          fallback_fix = """if (reply.isBlank()) {
+                    try {
+                        val encPrompt = java.net.URLEncoder.encode(sys + "\\nПользователь: " + userMsg, "UTF-8")
+                        val u = java.net.URL("https://pollinations.ai" + encPrompt + "?model=openai")
+                        val c = u.openConnection() as java.net.HttpURLConnection
+                        c.connectTimeout = 12000; c.readTimeout = 15000
+                        if (c.responseCode in 200..299) {
+                            val txt = c.inputStream.bufferedReader().use { it.readText() }.trim()
+                            if (txt.isNotEmpty() && !txt.contains("credits", true) && !txt.contains("top-up", true)) reply = txt
+                        }
+                    } catch (_: Exception) {}
+                }
+                if (reply.isBlank()) {"""
+          s = s.replace("if (reply.isBlank()) {", fallback_fix, 1)
+
+          # 3. Нейросетевой офлайн-голос Sherpa-ONNX (Piper Dmitri)
           neural_tts = """    private var neuralTts: com.k2fsa.sherpa.onnx.OfflineTts? = null
               private var pcmTrack: android.media.AudioTrack? = null
               private fun copyAssetDir(ap: String, dd: java.io.File) {
@@ -75,8 +95,8 @@ jobs:
               }
               private fun speakClean(text: String) {
                   val c = cleanSpeech(text)
-                  if (c.isEmpty()) { isSpeaking = false; if (isListeningActive) startListeningCycle(); return }
-                  if (neuralTts == null) { initNeuralVoice(); isSpeaking = false; if (isListeningActive) startListeningCycle(); return }
+                  if (c.isEmpty()) { isSpeaking = false; return }
+                  if (neuralTts == null) { initNeuralVoice(); isSpeaking = false; return }
                   isSpeaking = true
                   mainHandler.post { try { speechRecognizer?.cancel(); speechRecognizer?.destroy() } catch (_: Exception) {}; speechRecognizer = null }
                   thread {
@@ -96,14 +116,15 @@ jobs:
                           }
                       } catch (_: Exception) {}
                       isSpeaking = false
-                      if (isListeningActive) mainHandler.postDelayed({ startListeningCycle() }, 1500L)
                   }
               }"""
           if "override fun onCreate()" in s and "initNeuralVoice()" not in s:
               s = s.replace("override fun onCreate() {", "override fun onCreate() {\n        initNeuralVoice()")
           s = re.sub(r"    private fun speakClean\(text: String\) \{.*?    private fun startListeningCycle\(\)", neural_tts + "\n\n    private fun startListeningCycle()", s, flags=re.DOTALL)
+
+          # 4. Запрет на смайлики, сэр и выдумки
           s = s.replace("с эмодзи, без отказов про распознавание лиц.", "строго без смайликов и эмодзи, без отказов про распознавание лиц.")
-          s = s.replace("Используй подходящие эмодзи (⚡, 😊, 🤖, 🔥) для живого общения.", "СТРОГО ЗАПРЕЩЕНО использовать любые смайлики и эмодзи в ответах — пиши чистым текстом. Никогда не выдумывай факты и биографии артистов (Kizaru — Олег Нечипоренко, Haunted Family; Miyagi & Эндшпиль — дуэт из Владикавказа, Hajime Records).")
+          s = s.replace("Используй подходящие эмодзи (⚡, 😊, 🤖, 🔥) для живого общения.", "СТРОГО ЗАПРЕЩЕНО использовать любые смайлики и эмодзи в ответах — пиши чистым текстом. Никогда не выдумывай факты и биографии артистов.")
           s = s.replace("Слушаю вас, сэр.", "На связи, Шеф.")
           open(p, "w", encoding="utf-8").write(s)
           PYEND
