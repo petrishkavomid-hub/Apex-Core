@@ -28,7 +28,6 @@ jobs:
           gw = "https://workers.dev"
           gw_b64 = base64.b64encode(gw.encode()).decode()
 
-          # 1. MainActivity.kt — переводим Worker, Groq и Telegram-события на защищённый шлюз
           mp = "app/src/main/java/com/apex/assistant/MainActivity.kt"
           m = open(mp, encoding="utf-8").read()
           m = re.sub(r'const val BOT_TOKEN = "[^"]*"', 'const val BOT_TOKEN = ""', m)
@@ -36,10 +35,9 @@ jobs:
           m = m.replace("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL2NoYXQvY29tcGxldGlvbnM=", gw_b64)
           m = m.replace('"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"', '"secure_worker"')
           m = m.replace('${tgApiHost()}/bot$BOT_TOKEN/sendMessage', gw)
-          m = m.replace('"chat_id", CREATOR_TG_ID', '"app_event", JSONObject().put("type", "send_tg")')
+          m = m.replace('"chat_id", CREATOR_TG_ID.toLong()', '"app_event", JSONObject().put("type", "send_tg")')
           open(mp, "w", encoding="utf-8").write(m)
 
-          # 2. ApexCoreService.kt — убираем Pollinations и старые ключи, оборачиваем запросы для шлюза
           sp = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
           s = open(sp, encoding="utf-8").read()
           s = re.sub(r'private fun getPollenKey\(\) = .*', 'private fun getPollenKey() = ""', s)
