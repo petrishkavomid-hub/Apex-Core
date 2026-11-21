@@ -1,0 +1,89 @@
+name: Build Apex AI Secure
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch Secure Gateway & Encrypt Vault
+        env:
+          VAULT_PASS: ${{ secrets.VAULT_PASS }}
+        run: |
+          git checkout bb021fd -- fix_all.py update_code.py final_fix.py
+          pip install pillow -q && python3 fix_all.py && python3 update_code.py
+          cat << 'PYEND' > secure_patch.py
+          import re, base64
+          gw = "https://workers.dev"
+          gw_b64 = base64.b64encode(gw.encode()).decode()
+
+          mp = "app/src/main/java/com/apex/assistant/MainActivity.kt"
+          m = open(mp, encoding="utf-8").read()
+          m = re.sub(r'const val BOT_TOKEN = "[^"]*"', 'const val BOT_TOKEN = ""', m)
+          m = m.replace("aHR0cHM6Ly9hcGV4LWJvdC5wZXRyaXNoa2F2b21pZC53b3JrZXJzLmRldg==", gw_b64)
+          m = m.replace("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL2NoYXQvY29tcGxldGlvbnM=", gw_b64)
+          m = m.replace('"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"', '"secure_worker"')
+          m = m.replace('URL("${tgApiHost()}/bot$BOT_TOKEN/sendMessage")', f'URL("{gw}")')
+          m = m.replace('put("chat_id", CREATOR_TG_ID.toLong())\n                        put("text", text)', 'put("app_event", JSONObject().put("type", "send_tg").put("text", text))')
+          m = m.replace("llama-3.2-11b-vision-preview", "meta-llama/llama-4-scout-17b-16e-instruct")
+          open(mp, "w", encoding="utf-8").write(m)
+
+          sp = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
+          s = open(sp, encoding="utf-8").read()
+          s = re.sub(r'private fun getPollenKey\(\) = .*', 'private fun getPollenKey() = "worker_proxy"', s)
+          s = s.replace("https://pollinations.ai", gw)
+          s = s.replace("https://groq.com", gw)
+          s = s.replace("https://groq.com", gw)
+          s = s.replace("Z2hwX2NMRFF5MDAzaVBlMDRMZmVhbElObmlCWnBSNEFBNjJzdHd1Rg==", "")
+          s = s.replace("llama-3.2-11b-vision-preview", "meta-llama/llama-4-scout-17b-16e-instruct")
+          s = s.replace('listOf("openai", "openai-fast", "gemini", "deepseek")', 'listOf("llama-3.3-70b-versatile", "llama-3.1-8b-instant")')
+          s = re.sub(r'put\("model",\s*"[^"]+"\)', 'put("model", if (imgB64 != null) "meta-llama/llama-4-scout-17b-16e-instruct" else "llama-3.3-70b-versatile")', s)
+          s = s.replace('val out = body.toString().toByteArray()', 'val finalPayload = if (url.contains("workers.dev")) JSONObject().put("ai_chat", body).toString() else body.toString()\n                val out = finalPayload.toByteArray()')
+          s = s.replace('val out = body.toByteArray()', 'val finalPayload = if (url.contains("workers.dev") && body.contains("\\"messages\\"")) "{\\"ai_chat\\":" + body + "}" else body\n                val out = finalPayload.toByteArray()')
+          s = s.replace("mainHandler.postDelayed({ startListeningCycle() }, 1200L)", "// no_beep")
+          s = s.replace("mainHandler.postDelayed({ startListeningCycle() }, 900L)", "// no_beep")
+          open(sp, "w", encoding="utf-8").write(s)
+          PYEND
+          python3 secure_patch.py
+          rm -f secure_patch.py
+          tar -czf vault.tar.gz app build.gradle* settings.gradle* gradle*
+          openssl enc -aes-256-cbc -pbkdf2 -salt -in vault.tar.gz -out apex_vault.enc -pass env:VAULT_PASS
+          rm -f vault.tar.gz
+          git config user.name "ApexBot"
+          git config user.email "bot@apex.local"
+          git add apex_vault.enc
+          git commit -m "Update encrypted vault" || true
+          git push || true
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.2.1'
+
+      - run: gradle assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Apex-AI-Secure
+          path: app/build/outputs/apk/debug/app-debug.apk
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v2.0.${{ github.run_number }}
+          files: app/build/outputs/apk/debug/app-debug.apk
+          
