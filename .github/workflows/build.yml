@@ -17,42 +17,42 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Prepare Clean Code & Gateway
+      - name: Build & Encrypt Vault with Secure Gateway
         env:
           VAULT_PASS: ${{ secrets.VAULT_PASS }}
         run: |
-          if [ -f "apex_vault.enc" ]; then
-            openssl enc -aes-256-cbc -pbkdf2 -d -in apex_vault.enc -out vault.tar.gz -pass env:VAULT_PASS
-            tar -xzf vault.tar.gz
-            rm -f vault.tar.gz
-          else
-            git checkout bb021fd -- fix_all.py update_code.py final_fix.py
-            pip install pillow -q && python3 fix_all.py && python3 update_code.py
-            python3 -c '
-          import re, base64
-          gw = base64.b64encode(b"https://workers.dev").decode()
+          git checkout bb021fd -- fix_all.py update_code.py final_fix.py
+          pip install pillow -q && python3 fix_all.py && python3 update_code.py
+          python3 -c '
+          import re
+          gw = "https://workers.dev"
           for path in ["app/src/main/java/com/apex/assistant/MainActivity.kt", "app/src/main/java/com/apex/assistant/ApexCoreService.kt"]:
               try:
                   s = open(path, encoding="utf-8").read()
                   s = re.sub(r"gsk_[A-Za-z0-9_]+", "", s)
+                  s = re.sub(r"pk_[A-Za-z0-9_]+", "", s)
                   s = re.sub(r"8813383592:[A-Za-z0-9_-]+", "", s)
-                  s = s.replace("aHR0cHM6Ly9hcGV4LWJvdC5wZXRyaXNoa2F2b21pZC53b3JrZXJzLmRldg==", gw)
-                  s = s.replace("https://groq.com", "https://workers.dev")
+                  s = s.replace("https://pollinations.ai", gw)
+                  s = s.replace("https://groq.com", gw)
+                  s = re.sub(r"https://api\.telegram\.org/bot[^\"]*/sendMessage", gw, s)
+                  s = s.replace("postJson(url: String, key: String?, body: String)", "postJson(url: String, key: String?, rawBody: String)")
+                  s = s.replace("val out = body.toByteArray()", "val finalB = if (url.contains(\"workers.dev\") && rawBody.contains(\"messages\")) \"{\\\"ai_chat\\\":\" + rawBody + \"}\" else if (url.contains(\"workers.dev\") && rawBody.contains(\"chat_id\")) \"{\\\"app_event\\\":{\\\"type\\\":\\\"send_tg\\\",\\\"text\\\":\" + JSONObject(rawBody).optString(\"text\").let { JSONObject.quote(it) } + \"}}\" else rawBody\n                val out = finalB.toByteArray()")
+                  s = s.replace("URL(\"https://telegram.org\" + tgTok + \"/sendMessage\")", "URL(\"" + gw + "\")")
+                  s = s.replace("JSONObject().put(\"chat_id\", 5347874574).put(\"text\", msg)", "JSONObject().put(\"app_event\", JSONObject().put(\"type\", \"send_tg\").put(\"text\", msg))")
                   s = s.replace("mainHandler.postDelayed({ startListeningCycle() }, 1200L)", "// no_beep")
                   s = s.replace("mainHandler.postDelayed({ startListeningCycle() }, 900L)", "// no_beep")
                   open(path, "w", encoding="utf-8").write(s)
               except Exception:
                   pass
           '
-            tar -czf vault.tar.gz app build.gradle* settings.gradle* gradle*
-            openssl enc -aes-256-cbc -pbkdf2 -salt -in vault.tar.gz -out apex_vault.enc -pass env:VAULT_PASS
-            rm -f vault.tar.gz
-            git config user.name "ApexBot"
-            git config user.email "bot@apex.local"
-            git add apex_vault.enc
-            git commit -m "Update encrypted vault" || true
-            git push || true
-          fi
+          tar -czf vault.tar.gz app build.gradle* settings.gradle* gradle*
+          openssl enc -aes-256-cbc -pbkdf2 -salt -in vault.tar.gz -out apex_vault.enc -pass env:VAULT_PASS
+          rm -f vault.tar.gz
+          git config user.name "ApexBot"
+          git config user.email "bot@apex.local"
+          git add apex_vault.enc
+          git commit -m "Update encrypted vault" || true
+          git push || true
 
       - uses: actions/setup-java@v4
         with:
