@@ -31,11 +31,9 @@ m_url = base64.b64decode("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL21vZGVscw==")
 g_url = base64.b64decode("aHR0cHM6Ly93d3cuZ29vZ2xlLmNvbS9zZWFyY2g/cT0=").decode()
 u = base64.b64decode("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL2NoYXQvY29tcGxldGlvbnM=").decode()
 p_api = base64.b64decode("aHR0cHM6Ly9nZW4ucG9sbGluYXRpb25zLmFpL3YxL2NoYXQvY29tcGxldGlvbnM=").decode()
-
-service_code = rf'''package com.apex.assistant
+service_code = rf'''package com.apex.assistanti
 import android.app.*
 import android.content.*
-import android.media.AudioManager
 import android.net.Uri
 import android.os.*
 import android.provider.Settings
@@ -53,12 +51,9 @@ import kotlin.concurrent.thread
 
 class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
     private var tts: TextToSpeech? = null
-    private var ttsReady = false
-    private var pendingSpeak: String? = null
     private var speechRecognizer: SpeechRecognizer? = null
     private var isListeningActive = false
     private var isSpeaking = false
-    private var isAwakeWaitingCommand = false
     private val mainHandler = Handler(Looper.getMainLooper())
 
     companion object {{
@@ -75,8 +70,9 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
             r = r.replace(Regex("[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]"), "")
             r = r.replace(Regex("[\\u2600-\\u27BF\\u1F300-\\u1F9FF\\u1FA00-\\u1FAFF]"), "")
             r = r.replace(Regex("[\\uFE0F\\u200D]"), "")
+            r = r.replace(Regex("(?i)\\\\b(зв[её]здочка|зв[её]здочки|искра|искорка|лампочка|лампочки|огонёк|огонек|сердечко|улыбка|смайлик|смайлы|галочка|крестик)\\\\b"), "")
             r = r.replace(Regex("[ \\\\t]+"), " ")
-            r = r.replace(Regex("\\\\n{{2,}}"), ". ")
+            r = r.replace(Regex("\\\\n{{2,}}"), "\\\\n")
             return r.trim()
         }}
 
@@ -120,11 +116,12 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
         }}
 
         fun clearHistory(ctx: Context) {{
-            synchronized(chatHistory) {{ chatHistory.clear() }}
+            synchronized(chatHistory) {{
+                chatHistory.clear()
+            }}
             historyLoaded = true
             ctx.getSharedPreferences("apex_prefs", Context.MODE_PRIVATE).edit().putString("saved_chat_history", "[]").apply()
         }}
-
         fun publishGithubPush(title: String, body: String, onDone: ((Boolean) -> Unit)? = null) {{
             thread {{
                 try {{
@@ -134,7 +131,11 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
                     c1.setRequestProperty("Authorization", "Bearer $tok")
                     c1.setRequestProperty("User-Agent", "ApexAI")
                     val sha = if (c1.responseCode in 200..299) JSONObject(c1.inputStream.bufferedReader().use {{ it.readText() }}).optString("sha", "") else ""
-                    val payload = JSONObject().put("push_id", System.currentTimeMillis().toString()).put("title", title.ifEmpty {{ "Apex AI" }}).put("body", body).toString()
+                    val payload = JSONObject()
+                        .put("push_id", System.currentTimeMillis().toString())
+                        .put("title", title.ifEmpty {{ "Apex AI" }})
+                        .put("body", body)
+                        .toString()
                     val b64 = Base64.encodeToString(payload.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
                     val putBody = JSONObject().put("message", "push").put("content", b64)
                     if (sha.isNotEmpty()) putBody.put("sha", sha)
@@ -145,8 +146,11 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
                     c2.setRequestProperty("User-Agent", "ApexAI")
                     c2.doOutput = true
                     OutputStreamWriter(c2.outputStream).use {{ it.write(putBody.toString()) }}
-                    onDone?.invoke(c2.responseCode in 200..299)
-                }} catch (_: Exception) {{ onDone?.invoke(false) }}
+                    val ok = c2.responseCode in 200..299
+                    onDone?.invoke(ok)
+                }} catch (_: Exception) {{
+                    onDone?.invoke(false)
+                }}
             }}
         }}
 
@@ -160,8 +164,9 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
                     if (gh.responseCode in 200..299) {{
                         val sha = JSONObject(gh.inputStream.bufferedReader().use {{ it.readText() }}).optString("sha", "").take(7)
                         val saved = prefs.getString("installed_commit_sha", "") ?: ""
-                        if (sha.isNotEmpty() && saved.isEmpty()) prefs.edit().putString("installed_commit_sha", sha).apply()
-                        else if (sha.isNotEmpty() && sha != saved) {{
+                        if (sha.isNotEmpty() && saved.isEmpty()) {{
+                            prefs.edit().putString("installed_commit_sha", sha).apply()
+                        }} else if (sha.isNotEmpty() && sha != saved) {{
                             act.runOnUiThread {{
                                 try {{
                                     AlertDialog.Builder(act)
@@ -171,7 +176,8 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
                                             prefs.edit().putString("installed_commit_sha", sha).apply()
                                             act.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("{nl_apk}")))
                                         }}
-                                        .setNegativeButton("Позже", null).show()
+                                        .setNegativeButton("Позже", null)
+                                        .show()
                                 }} catch (_: Exception) {{}}
                             }}
                         }}
@@ -192,12 +198,8 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
                 try {{
                     val ctxInfo = getMskTimeInfo()
                     val hasHistory = synchronized(chatHistory) {{ chatHistory.isNotEmpty() }}
-                    val noGreetRule = if (hasHistory) "ВНИМАНИЕ: Диалог УЖЕ идёт! КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО здороваться («Привет», «Здравствуйте», «С возвращением» и т.д.). Отвечай сразу по сути вопроса, опираясь на контекст выше." else "Отвечай сразу по делу, живо и по-человечески."
-                    val sys = if (imageBase64 != null) {{
-                        "Ты — Apex AI в стиле Джарвиса от Derek Stealth. $ctxInfo Изучи фото. Если на снимке известный человек, актёр, блогер, спортсмен или персонаж — ОБЯЗАТЕЛЬНО назови его имя и расскажи, кто он. Общайся живо, душевно, с эмодзи, без отказов про распознавание лиц."
-                    }} else {{
-                        "Ты — Apex AI от Derek Stealth, живой и душевный голосовой друг-ассистент в стиле Джарвиса: спокойный, вежливый, собранный и остроумный. $ctxInfo $noGreetRule Используй подходящие эмодзи (⚡, 😊, 🤖, 🔥) для живого общения. Адаптируй длину: если вопрос короткий (привет, как дела, сколько время) — отвечай коротко (1-2 предложения), если просят написать текст, решить задачу или объяснить — давай глубокий, развёрнутый ответ."
-                    }}
+                    val noGreetRule = if (hasHistory) "ВНИМАНИЕ: Диалог УЖЕ идёт! КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО здороваться («Привет», «Здравствуйте», «С возвращением» и т.д.). Отвечай сразу по сути вопроса, опираясь на контекст выше." else "Отвечай сразу по делу, кратко, умно и по-человечески."
+                    val sys = "Ты — Apex AI, интеллектуальный ассистент от Derek Stealth в стиле Джарвиса: спокойный, вежливый, собранный и остроумный. $ctxInfo $noGreetRule Пиши грамотно с правильной пунктуацией (точки, запятые, тире), чтобы речь при озвучке звучала с естественными паузами и интонацией. Не используй символы разметки (*, #, _)."
 
                     val msgs = JSONArray().put(JSONObject().put("role", "system").put("content", sys))
                     synchronized(chatHistory) {{
@@ -205,14 +207,13 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
                     }}
 
                     if (imageBase64 != null) {{
-                        val qText = if (prompt.isBlank()) "Кто или что на этом фото? Назови имя человека или персонажа, если он узнаваем, и подробно опиши снимок." else "$prompt (Обязательно назови, кто на фото, если это известный человек или персонаж)."
                         val arr = JSONArray()
-                            .put(JSONObject().put("type", "text").put("text", qText))
+                            .put(JSONObject().put("type", "text").put("text", if (prompt.isBlank()) "Подробно разбери это фото." else prompt))
                             .put(JSONObject().put("type", "image_url").put("image_url", JSONObject().put("url", "data:image/jpeg;base64,$imageBase64")))
                         msgs.put(JSONObject().put("role", "user").put("content", arr))
 
-                        for (m in listOf("gemini", "openai", "openai-fast", "gpt-4o-mini")) {{
-                            val body = JSONObject().put("model", m).put("messages", msgs).put("temperature", 0.5)
+                        for (m in listOf("openai", "gemini", "openai-fast", "gpt-4o-mini")) {{
+                            val body = JSONObject().put("model", m).put("messages", msgs).put("temperature", 0.6)
                             val (code, raw) = postJson("{p_api}", pKey, body)
                             if (code in 200..299) {{
                                 val rep = JSONObject(raw).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim()
@@ -232,7 +233,7 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
                             val ids = fetchModels(key)
                             cachedModel = listOf("llama-3.3-70b", "llama-3.1-8b", "70b", "qwen", "gemma").firstNotNullOfOrNull {{ tag -> ids.firstOrNull {{ it.contains(tag, true) }} }} ?: "llama-3.3-70b-versatile"
                         }}
-                        val bodyGroq = JSONObject().put("model", cachedModel!!).put("messages", msgs).put("temperature", 0.7).put("max_tokens", 1500)
+                        val bodyGroq = JSONObject().put("model", cachedModel!!).put("messages", msgs).put("temperature", 0.65).put("max_tokens", 700)
                         val (code, raw) = postJson("{u}", "Bearer $key", bodyGroq)
                         if (code in 200..299) {{
                             val rep = JSONObject(raw).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim()
@@ -249,7 +250,7 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
                         }}
 
                         for (m in listOf("openai", "openai-fast", "gemini", "deepseek")) {{
-                            val bodyFallback = JSONObject().put("model", m).put("messages", msgs).put("temperature", 0.7)
+                            val bodyFallback = JSONObject().put("model", m).put("messages", msgs).put("temperature", 0.65)
                             val (fCode, fRaw) = postJson("{p_api}", pKey, bodyFallback)
                             if (fCode in 200..299) {{
                                 val rep = JSONObject(fRaw).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim()
@@ -270,8 +271,7 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
                 }}
             }}
         }}
-
-        private fun fetchModels(key: String): List<String> {{
+                private fun fetchModels(key: String): List<String> {{
             try {{
                 val c = URL("{m_url}").openConnection() as HttpURLConnection
                 c.setRequestProperty("Authorization", "Bearer $key")
@@ -307,14 +307,15 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
             )
             return s.map {{ map[it] ?: it.toString() }}.joinToString("")
         }}
-
-        private fun runCmd(ctx: Context, raw: String): String? {{
+                private fun runCmd(ctx: Context, raw: String): String? {{
             val q = raw.lowercase(Locale.getDefault()).replace(Regex("[^а-яa-z0-9+:\\\\s]"), " ").replace(Regex("\\\\s+"), " ").trim()
             val aliases = mapOf(
                 "ютуб" to "youtube", "youtube" to "youtube", "телеграм" to "telegram", "телеграмм" to "telegram", "телегу" to "telegram", "тг" to "telegram",
                 "ватсап" to "whatsapp", "вацап" to "whatsapp", "вк" to "vkontakte", "вконтакте" to "vkontakte", "тикток" to "musically", "tiktok" to "musically",
                 "хром" to "chrome", "браузер" to "chrome", "озон" to "ozon", "вб" to "wildberries", "вайлдберриз" to "wildberries", "сдэк" to "cdek", "авито" to "avito",
-                                "карты" to "maps", "яндекс карты" to "yandexmaps", "музыка" to "music", "яндекс музыка" to "yandex.music", "спотифай" to "spotify",
+                "втб" to "vtb", "сбер" to "sberbank", "сбербанк" to "sberbank", "тинькофф" to "tinkoff", "т банк" to "tinkoff", "инстаграм" to "instagram", "инста" to "instagram",
+                "почта" to "gmail", "камера" to "camera", "галерея" to "gallery", "фото" to "gallery", "настройки" to "settings", "калькулятор" to "calculator",
+                "карты" to "maps", "яндекс карты" to "yandexmaps", "музыка" to "music", "яндекс музыка" to "yandex.music", "спотифай" to "spotify",
                 "дискорд" to "discord", "макс" to "max", "госуслуги" to "gosuslugi", "алиса" to "yandex", "яндекс" to "yandex",
                 "стим" to "steam", "капкут" to "capcut", "впн" to "vpn", "проводник" to "files", "часы" to "clock", "телефон" to "dialer", "контакты" to "contacts"
             )
@@ -414,7 +415,7 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
             return null
         }}
     }}
-        private fun applyJarvisVoice() {{
+       private fun applyJarvisVoice() {{
         try {{
             tts?.setLanguage(Locale("ru", "RU"))
             val ruVoices = tts?.voices?.filter {{ it.locale.language == "ru" }} ?: emptyList()
@@ -425,8 +426,8 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
                 ?: ruVoices.filter {{ !it.isNetworkConnectionRequired }}.maxByOrNull {{ it.quality }}
                 ?: ruVoices.maxByOrNull {{ it.quality }}
             if (jarvisVoice != null) tts?.voice = jarvisVoice
-            tts?.setPitch(0.92f)
-            tts?.setSpeechRate(1.12f)
+            tts?.setPitch(0.83f)
+            tts?.setSpeechRate(0.86f)
         }} catch (_: Exception) {{}}
     }}
 
@@ -444,45 +445,43 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
 
     override fun onInit(status: Int) {{
         if (status == TextToSpeech.SUCCESS) {{
-            ttsReady = true
             applyJarvisVoice()
             tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {{
                 override fun onStart(id: String?) {{ isSpeaking = true }}
                 override fun onDone(id: String?) {{
                     if (id == "APEX_LAST") {{
                         isSpeaking = false
-                        if (isListeningActive) mainHandler.postDelayed({{ startListeningCycle() }}, 450)
+                        if (isListeningActive) mainHandler.postDelayed({{ startListeningCycle() }}, 150)
                     }}
                 }}
                 override fun onError(id: String?) {{
                     isSpeaking = false
-                    if (isListeningActive) mainHandler.postDelayed({{ startListeningCycle() }}, 500)
+                    if (isListeningActive) mainHandler.postDelayed({{ startListeningCycle() }}, 150)
                 }}
             }})
-            pendingSpeak?.let {{ txt -> pendingSpeak = null; speakClean(txt) }}
         }}
     }}
-
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {{
+        override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {{
         when (intent?.action) {{
             "START_VOICE" -> {{
                 val nb = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) Notification.Builder(this, "apex_voice") else @Suppress("DEPRECATION") Notification.Builder(this)
-                startForeground(1, nb.setContentTitle("Apex AI").setContentText("Джарвис на связи • Скажите «Апекс»").setSmallIcon(android.R.drawable.ic_btn_speak_now).build())
+                startForeground(1, nb.setContentTitle("Apex AI").setContentText("Активен • Скажите «Апекс»").setSmallIcon(android.R.drawable.ic_btn_speak_now).build())
                 isListeningActive = true
-                speakClean("Системы в норме, я на связи.")
+                startListeningCycle()
             }}
             "STOP_VOICE" -> {{
                 isListeningActive = false
                 isSpeaking = false
-                try {{ tts?.stop(); speechRecognizer?.cancel(); speechRecognizer?.destroy() }} catch (_: Exception) {{}}
-                speechRecognizer = null
+                try {{ tts?.stop() }} catch (_: Exception) {{}}
+                try {{ speechRecognizer?.destroy() }} catch (_: Exception) {{}}
                 stopForeground(true)
                 stopSelf()
             }}
         }}
         return START_STICKY
     }}
-        private fun startBackgroundLoops() {{
+
+    private fun startBackgroundLoops() {{
         thread {{
             while (true) {{
                 try {{
@@ -517,70 +516,134 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
         nm?.notify(id, nb.build())
     }}
 
-    private fun muteBeepBriefly() {{
-        try {{
-            val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            val origNotif = am.getStreamVolume(AudioManager.STREAM_NOTIFICATION)
-            val origSys = am.getStreamVolume(AudioManager.STREAM_SYSTEM)
-            am.setStreamVolume(AudioManager.STREAM_NOTIFICATION, 0, 0)
-            am.setStreamVolume(AudioManager.STREAM_SYSTEM, 0, 0)
-            mainHandler.postDelayed({{
-                try {{
-                    am.setStreamVolume(AudioManager.STREAM_NOTIFICATION, origNotif, 0)
-                    am.setStreamVolume(AudioManager.STREAM_SYSTEM, origSys, 0)
-                }} catch (_: Exception) {{}}
-            }}, 350)
-        }} catch (_: Exception) {{}}
-    }}
-
     private fun speakClean(text: String) {{
         val c = cleanSpeech(text)
-        if (c.isEmpty()) {{ isSpeaking = false; if (isListeningActive) startListeningCycle(); return }}
-        if (!ttsReady || tts == null) {{ pendingSpeak = c; return }}
+        if (c.isEmpty()) {{
+            isSpeaking = false
+            if (isListeningActive) startListeningCycle()
+            return
+        }}
         isSpeaking = true
         mainHandler.post {{
-            try {{ speechRecognizer?.cancel(); speechRecognizer?.destroy() }} catch (_: Exception) {{}}
-            speechRecognizer = null
             applyJarvisVoice()
             val chunks = c.split(Regex("(?<=[.!?;—])\\\\s+")).filter {{ it.isNotBlank() }}
-            if (chunks.isEmpty()) {{ isSpeaking = false; if (isListeningActive) startListeningCycle(); return@post }}
+            if (chunks.isEmpty()) {{
+                isSpeaking = false
+                if (isListeningActive) startListeningCycle()
+                return@post
+            }}
             for (i in chunks.indices) {{
                 val mode = if (i == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
                 val uttId = if (i == chunks.lastIndex) "APEX_LAST" else "APEX_PART_$i"
-                val params = Bundle().apply {{
-                    putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, uttId)
-                    putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, AudioManager.STREAM_MUSIC)
+                tts?.speak(chunks[i], mode, Bundle(), uttId)
+                if (i < chunks.lastIndex) {{
+                    tts?.playSilentUtterance(280, TextToSpeech.QUEUE_ADD, "APEX_PAUSE_$i")
                 }}
-                tts?.speak(chunks[i], mode, params, uttId)
-                if (i < chunks.lastIndex) tts?.playSilentUtterance(160, TextToSpeech.QUEUE_ADD, "APEX_PAUSE_$i")
             }}
+            mainHandler.postDelayed({{ startStopListener() }}, 200)
         }}
     }}
-
-    private fun startListeningCycle() {{
-        if (!isListeningActive || isSpeaking) return
+       private fun startStopListener() {{
+        if (!isSpeaking) return
         mainHandler.post {{
-            if (!isListeningActive || isSpeaking) return@post
             try {{
-                try {{ speechRecognizer?.cancel(); speechRecognizer?.destroy() }} catch (_: Exception) {{}}
-                muteBeepBriefly()
+                speechRecognizer?.cancel()
+                speechRecognizer?.destroy()
                 speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
                 speechRecognizer?.setRecognitionListener(object : RecognitionListener {{
-                    private var handled = false
-                    private val wakeList = listOf("апекс", "апэкс", "апек", "апикс", "эпекс", "алекс", "апекса", "апексу", "эй апекс", "окей апекс", "ок апекс", "слушай апекс", "apex", "hey apex", "ok apex")
                     override fun onReadyForSpeech(p: Bundle?) {{}}
                     override fun onBeginningOfSpeech() {{}}
                     override fun onRmsChanged(r: Float) {{}}
                     override fun onBufferReceived(b: ByteArray?) {{}}
                     override fun onEndOfSpeech() {{}}
                     override fun onEvent(e: Int, p: Bundle?) {{}}
-                    override fun onError(e: Int) {{ if (!handled && isListeningActive && !isSpeaking) mainHandler.postDelayed({{ startListeningCycle() }}, 1500L) }}
-                    override fun onPartialResults(p: Bundle?) {{}}
+
+                    private fun checkAndStop(bundle: Bundle?): Boolean {{
+                        val list = bundle?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION) ?: return false
+                        val fullText = list.joinToString(" ").lowercase(Locale.getDefault())
+                        val stops = listOf("стоп", "хватит", "молчи", "заткнись", "замолчи", "тихо", "тише", "прекрати", "пауза", "отмена", "остановись", "стопэ", "stop")
+                        if (stops.any {{ fullText.contains(it) }}) {{
+                            try {{ tts?.stop() }} catch (_: Exception) {{}}
+                            isSpeaking = false
+                            try {{ speechRecognizer?.cancel() }} catch (_: Exception) {{}}
+                            if (isListeningActive) mainHandler.postDelayed({{ startListeningCycle() }}, 120)
+                            return true
+                        }}
+                        return false
+                    }}
+
+                    override fun onPartialResults(p: Bundle?) {{ checkAndStop(p) }}
+                    override fun onResults(r: Bundle?) {{
+                        if (!checkAndStop(r) && isSpeaking) mainHandler.postDelayed({{ startStopListener() }}, 120)
+                    }}
+                    override fun onError(e: Int) {{
+                        if (isSpeaking) mainHandler.postDelayed({{ startStopListener() }}, 180)
+                    }}
+                }})
+                val ri = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {{
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
+                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 200)
+                }}
+                speechRecognizer?.startListening(ri)
+            }} catch (_: Exception) {{
+                if (isSpeaking) mainHandler.postDelayed({{ startStopListener() }}, 250)
+            }}
+        }}
+    }}
+        private fun startListeningCycle() {{
+        if (!isListeningActive || isSpeaking) return
+        mainHandler.post {{
+            try {{
+                speechRecognizer?.cancel()
+                speechRecognizer?.destroy()
+                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
+                speechRecognizer?.setRecognitionListener(object : RecognitionListener {{
+                    private var handled = false
+                    private val wakeList = listOf(
+                        "апекс", "апэкс", "апек", "апикс", "эпекс", "алекс", "апекса", "апексу",
+                        "эй апекс", "окей апекс", "ок апекс", "слушай апекс", "apex", "hey apex", "ok apex"
+                    )
+
+                    override fun onReadyForSpeech(p: Bundle?) {{}}
+                    override fun onBeginningOfSpeech() {{}}
+                    override fun onRmsChanged(r: Float) {{}}
+                    override fun onBufferReceived(b: ByteArray?) {{}}
+                    override fun onEndOfSpeech() {{}}
+                    override fun onEvent(e: Int, p: Bundle?) {{}}
+
+                    override fun onError(e: Int) {{
+                        if (!handled && isListeningActive && !isSpeaking) mainHandler.postDelayed({{ startListeningCycle() }}, 70)
+                    }}
+
+                    override fun onPartialResults(p: Bundle?) {{
+                        if (handled) return
+                        val candidates = p?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION) ?: return
+                        for (rawTxt in candidates) {{
+                            val txt = rawTxt.lowercase(Locale.getDefault()).trim()
+                            val wake = wakeList.firstOrNull {{ txt.contains(it) }}
+                            if (wake != null) {{
+                                val rest = txt.substring(txt.indexOf(wake) + wake.length).replace(Regex("^[^а-яa-z0-9]+"), "").trim()
+                                if (rest.length >= 4 && (rest.startsWith("стоп") || rest.startsWith("фонарик") || rest.startsWith("домой") || rest.startsWith("назад"))) {{
+                                    handled = true
+                                    try {{ speechRecognizer?.stopListening() }} catch (_: Exception) {{}}
+                                    handleHeard(rest)
+                                    return
+                                }}
+                            }}
+                        }}
+                    }}
+
                     override fun onResults(results: Bundle?) {{
                         if (handled) return
                         val candidates = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION) ?: emptyList()
                         val heard = candidates.firstOrNull()?.trim() ?: ""
-                        if (heard.isEmpty()) {{ if (isListeningActive && !isSpeaking) mainHandler.postDelayed({{ startListeningCycle() }}, 1500L); return }}
+                        if (heard.isEmpty()) {{
+                            if (isListeningActive && !isSpeaking) startListeningCycle()
+                            return
+                        }}
                         var matchedWake: String? = null
                         var matchedPhrase = heard
                         for (cand in candidates) {{
@@ -589,34 +652,36 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
                             if (w != null) {{ matchedWake = w; matchedPhrase = cand; break }}
                         }}
                         if (matchedWake != null) {{
-                            handled = true; isAwakeWaitingCommand = false
+                            handled = true
                             val low = matchedPhrase.lowercase(Locale.getDefault())
                             val cmd = matchedPhrase.substring(low.indexOf(matchedWake) + matchedWake.length).replace(Regex("^[^а-яa-z0-9А-ЯA-Z]+"), "").trim()
                             handleHeard(cmd)
-                        }} else if (isAwakeWaitingCommand) {{
-                            handled = true; isAwakeWaitingCommand = false; handleHeard(heard)
                         }} else {{
                             val directCmd = runCmd(this@ApexCoreService, heard)
-                            if (directCmd != null) {{ handled = true; speakClean(directCmd) }}
-                            else if (isListeningActive && !isSpeaking) mainHandler.postDelayed({{ startListeningCycle() }}, 1500L)
+                            if (directCmd != null) {{
+                                handled = true; speakClean(directCmd)
+                            }} else if (isListeningActive && !isSpeaking) startListeningCycle()
                         }}
                     }}
                 }})
+
                 val ri = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {{
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
                     putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                     putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
-                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1200L)
-                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 10000L)
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 500)
+                    putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 400)
                 }}
                 speechRecognizer?.startListening(ri)
-            }} catch (_: Exception) {{ if (isListeningActive && !isSpeaking) mainHandler.postDelayed({{ startListeningCycle() }}, 2000L) }}
+            }} catch (_: Exception) {{
+                if (isListeningActive && !isSpeaking) mainHandler.postDelayed({{ startListeningCycle() }}, 150)
+            }}
         }}
     }}
 
     private fun handleHeard(cmd: String) {{
-        if (cmd.isEmpty()) {{ isAwakeWaitingCommand = true; speakClean("Слушаю вас, сэр."); return }}
+        if (cmd.isEmpty()) {{ speakClean("Слушаю вас."); return }}
         val prefs = getSharedPreferences("apex_prefs", Context.MODE_PRIVATE)
         val devId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: ""
         val isCreator = MainActivity.CREATOR_IDS.contains(devId) || prefs.getBoolean("is_admin", false)
@@ -624,9 +689,11 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
     }}
 
     override fun onBind(intent: Intent?) = null
+
     override fun onDestroy() {{
         isListeningActive = false; isSpeaking = false
-        try {{ speechRecognizer?.cancel(); speechRecognizer?.destroy(); tts?.stop(); tts?.shutdown() }} catch (_: Exception) {{}}
+        try {{ speechRecognizer?.cancel(); speechRecognizer?.destroy() }} catch (_: Exception) {{}}
+        try {{ tts?.stop(); tts?.shutdown() }} catch (_: Exception) {{}}
         super.onDestroy()
     }}
 }}
@@ -639,12 +706,71 @@ main_path = "app/src/main/java/com/apex/assistant/MainActivity.kt"
 if os.path.exists(main_path):
     with open(main_path, "r", encoding="utf-8") as f:
         mc = f.read()
+
     idx_dup = mc.find("class ApexCoreService :")
-    if idx_dup != -1: mc = mc[:idx_dup].rstrip() + "\n"
+    if idx_dup != -1:
+        mc = mc[:idx_dup].rstrip() + "\n"
+
     mc = mc.replace('return return "', 'return "')
     mc = mc.replace('setContentView(drawerLayout)', 'setContentView(drawerLayout)\n        ApexCoreService.checkAppUpdateDialog(this)')
     mc = mc.replace('prefs.edit().putString("chat_history", "[]").apply()', 'ApexCoreService.clearHistory(this@MainActivity)')
-    mc = mc.replace('if (prefs.getBoolean("dev_unlocked", false)) {', 'val devIdNow = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: ""\n            if (CREATOR_IDS.contains(devIdNow) || prefs.getBoolean("dev_unlocked", false)) {')
-    mc = mc.replace('sendDirectToAdminBot("📢 PUSH-РАССЫЛКА APEX AI\\nЗаголовок: $pTitle\\nТекст: $pBody")', 'ApexCoreService.publishGithubPush(pTitle, pBody)')
-    if os.path.exists(main_path): open(main_path, "w", encoding="utf-8").write(mc + "\nclass ApexAccessibilityService : android.accessibilityservice.AccessibilityService() { companion object { var instance: ApexAccessibilityService? = null }; override fun onServiceConnected() { instance = this }; override fun onAccessibilityEvent(e: android.view.accessibility.AccessibilityEvent?) {}; override fun onInterrupt() {} }\n")
-open("update_code.py", "w").write("print('ok')")
+
+    old_dev = 'if (prefs.getBoolean("dev_unlocked", false)) {'
+    new_dev = 'val devIdNow = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID) ?: ""\n            if (CREATOR_IDS.contains(devIdNow) || prefs.getBoolean("dev_unlocked", false)) {'
+    mc = mc.replace(old_dev, new_dev)
+
+    old_push = '''sendDirectToAdminBot("📢 PUSH-РАССЫЛКА APEX AI\\nЗаголовок: $pTitle\\nТекст: $pBody")
+                    postToWorker(prefs, JSONObject().apply {
+                        put("app_event", JSONObject().apply {
+                            put("type", "send_push")
+                            put("title", pTitle)
+                            put("body", pBody)
+                        })
+                    })'''
+    mc = mc.replace(old_push, 'ApexCoreService.publishGithubPush(pTitle, pBody)')
+
+    old_logo = '''        val logoBadge = object : View(this) {
+            val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = textMainColor
+                style = Paint.Style.FILL
+            }
+            override fun onDraw(canvas: Canvas) {
+                super.onDraw(canvas)
+                val s = minOf(width, height) / 108f
+                canvas.save()
+                canvas.scale(s, s)
+                val path = Path().apply {
+                    moveTo(50f, 30f)
+                    lineTo(58f, 30f)
+                    lineTo(75f, 78f)
+                    lineTo(66.5f, 78f)
+                    lineTo(62.2f, 65.5f)
+                    lineTo(46.2f, 65.5f)
+                    lineTo(48.5f, 58.8f)
+                    lineTo(60f, 58.8f)
+                    lineTo(54f, 40.5f)
+                    lineTo(41.5f, 78f)
+                    lineTo(33f, 78f)
+                    close()
+                }
+                canvas.drawPath(path, fillPaint)
+                canvas.restore()
+            }
+        }'''
+    new_logo = '''        val logoBadge = TextView(this).apply {
+            text = "A"
+            textSize = 44f
+            typeface = Typeface.create("sans-serif-black", Typeface.BOLD)
+            setTextColor(Color.BLACK)
+            gravity = Gravity.CENTER
+            background = GradientDrawable().apply {
+                setColor(Color.WHITE)
+                cornerRadius = 36f
+            }
+            elevation = 8f
+        }'''
+pkg_real = next((l.split()[1] for l in open(main_path, "r", encoding="utf-8") if l.startswith("package ")), "com.apex.assistant")
+open(main_path, "w", encoding="utf-8").write(mc.replace(old_logo, new_logo) + "\nclass ApexAccessibilityService : android.accessibilityservice.AccessibilityService() { companion object { var instance: ApexAccessibilityService? = null }; override fun onServiceConnected() { instance = this }; override fun onAccessibilityEvent(e: android.view.accessibility.AccessibilityEvent?) {}; override fun onInterrupt() {} }\n")
+open("app/src/main/java/com/apex/assistant/ApexCoreService.kt", "w", encoding="utf-8").write("package com.apex.assistant\n" + service_code.partition("\n")[2])
+
+
