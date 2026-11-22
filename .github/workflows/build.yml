@@ -28,24 +28,38 @@ jobs:
           gw = "https://workers.dev"
           gw_b64 = base64.b64encode(gw.encode()).decode()
 
+          # 1. Патчим MainActivity.kt (оценки -> в твой воркер, UI и иконки не трогаем)
           mp = "app/src/main/java/com/apex/assistant/MainActivity.kt"
           m = open(mp, encoding="utf-8").read()
           m = re.sub(r"const val BOT_TOKEN = \"[^\"]*\"", "const val BOT_TOKEN = \"\"", m)
-          m = m.replace("aHR0cHM6Ly9hcGV4LWJvdC5wZXRyaXNoa2F2b21pZC53b3JrZXJzLmRldg==", gw_b64).replace("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL2NoYXQvY29tcGxldGlvbnM=", gw_b64).replace("https://workers.dev", gw)
-          m = m.replace("URL(\"${tgApiHost()}/bot$BOT_TOKEN/sendMessage\")", f"URL(\"{gw}\")").replace("put(\"chat_id\", CREATOR_TG_ID.toLong())", "put(\"app_event\", JSONObject().put(\"type\", \"send_tg\").put(\"text\", text))").replace("put(\"text\", text)\n                    }", "}")
+          m = m.replace("aHR0cHM6Ly9hcGV4LWJvdC5wZXRyaXNoa2F2b21pZC53b3JrZXJzLmRldg==", gw_b64)
+          m = m.replace("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL2NoYXQvY29tcGxldGlvbnM=", gw_b64)
+          m = m.replace("https://workers.dev", gw)
+          m = re.sub(r"URL\(\"[^\"]*sendMessage\"\)", f"URL(\"{gw}\")", m)
+          m = m.replace("put(\"chat_id\", CREATOR_TG_ID.toLong())", "put(\"app_event\", JSONObject().put(\"type\", \"send_tg\").put(\"text\", text))")
+          m = re.sub(r"put\(\"text\",\s*text\)\s*\}", "}", m)
           open(mp, "w", encoding="utf-8").write(m)
 
+          # 2. Патчим сгенерированный ApexCoreService.kt
           sp = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
           s = open(sp, encoding="utf-8").read()
-          s = s.replace("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL2NoYXQvY29tcGxldGlvbnM=", gw_b64).replace("https://groq.com", gw).replace("https://pollinations.ai", gw)
-          s = re.sub(r"private fun getPollenKey\(\) = .*", "private fun getPollenKey() = \"worker_proxy\"", s).replace("listOf(\"gemini\", \"openai\", \"openai-fast\")", "listOf(\"meta-llama/llama-4-scout-17b-16e-instruct\")")
 
+          # Направляем ИИ в твой воркер
+          s = re.sub(r"postJson\(\"[^\"]+\",\s*\"Bearer \$key\",\s*bodyGroq\)", f"postJson(\"{gw}\", null, bodyGroq)", s)
+          s = re.sub(r"postJson\(\"[^\"]+\",\s*pKey,\s*body\)", f"postJson(\"{gw}\", null, body)", s)
           s = s.replace("OutputStreamWriter(c.outputStream).use { it.write(body.toString()) }", "val payload = if (urlStr.contains(\"workers.dev\")) JSONObject().put(\"ai_chat\", body).toString() else body.toString(); OutputStreamWriter(c.outputStream).use { it.write(payload) }")
 
-          neural = "private var neuralPlayer: android.media.MediaPlayer? = null\n    private fun speakClean(text: String) { val c = cleanSpeech(text); if (c.isEmpty()) { isSpeaking = false; if (isListeningActive) startListeningCycle(); return }; isSpeaking = true; mainHandler.post { try { speechRecognizer?.cancel() } catch (_: Exception) {}; thread { try { val conn = URL(\"https://pollinations.ai\" + Uri.encode(c.take(600)) + \"?model=openai-audio&voice=onyx\").openConnection() as HttpURLConnection; conn.connectTimeout = 5000; conn.readTimeout = 9000; if (conn.responseCode in 200..299) { val b = conn.inputStream.readBytes(); if (b.size > 1000) { val f = java.io.File(cacheDir, \"tts_\" + System.currentTimeMillis() + \".mp3\"); f.writeBytes(b); mainHandler.post { try { neuralPlayer?.release(); neuralPlayer = android.media.MediaPlayer().apply { setDataSource(f.absolutePath); setOnCompletionListener { it.release(); f.delete(); isSpeaking = false; if (isListeningActive) mainHandler.postDelayed({ startListeningCycle() }, 450L) }; prepare(); start() } } catch (_: Exception) { isSpeaking = false } }; return@thread } } } catch (_: Exception) {}; mainHandler.post { speakSystemFallback(c) } } } }\n    private fun speakSystemFallback(text: String) {"
-          s = s.replace("private fun speakClean(text: String) {", neural)
+          # Отключаем startStopListener (причина самоперебивания и бульканья)
+          s = s.replace("mainHandler.postDelayed({ startStopListener() }, 200)", "// disabled self-interrupt")
+          s = s.replace("private fun startStopListener() {", "private fun startStopListener() { return;")
+
+          # Подключаем студийный нейро-голос (Onyx) вместо робо-TTS
+          s = s.replace("https://google.com", "https://pollinations.ai\" + enc + \"?model=openai-audio&voice=onyx")
+          s = s.replace("if (ttsReady) { tts?.speak(chunks[i], mode, null, uttId) } else { if (i == 0) speakOnlineFallback(c); break }", "if (i == 0) speakOnlineFallback(c); break")
+          s = s.replace("if (ttsReady) tts?.speak(reply, TextToSpeech.QUEUE_FLUSH, null, \"APEX_UTTERANCE\") else speakOnlineFallback(reply)", "speakOnlineFallback(reply)")
+
+          # Убираем постоянный destroy() микрофона при каждом цикле (убирает бульканье)
           s = s.replace("try { speechRecognizer?.cancel(); speechRecognizer?.destroy() } catch (_: Exception) {}\n                muteBeepBriefly()\n                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)", "if (speechRecognizer == null) { speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this) }")
-          s = s.replace("mainHandler.postDelayed({ startListeningCycle() }, 1500L)", "if (e == SpeechRecognizer.ERROR_CLIENT || e == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) { try { speechRecognizer?.destroy() } catch (_: Exception) {}; speechRecognizer = null }; mainHandler.postDelayed({ startListeningCycle() }, 600L)")
           open(sp, "w", encoding="utf-8").write(s)
           '
           tar -czf vault.tar.gz app build.gradle* settings.gradle* gradle*
