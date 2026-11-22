@@ -43,6 +43,7 @@ jobs:
 
           sp = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
           s = open(sp, encoding="utf-8").read()
+          s = s.replace("private var ttsReady = false", "", 1)
 
           s = s.replace("https://groq.com", gw)
           s = s.replace("https://pollinations.ai", gw)
