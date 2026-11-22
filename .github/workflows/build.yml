@@ -23,8 +23,7 @@ jobs:
         run: |
           git checkout bb021fd -- fix_all.py update_code.py final_fix.py
           sed -i 's/^ c2 =/c2 =/; s/^ c3 =/c3 =/' final_fix.py
-                    pip install pillow -q && python3 final_fix.py
-                    
+          pip install pillow -q && python3 final_fix.py
           python3 -c '
           import re, base64, os
           gw = "https://" + "purple-butterfly-e9ca." + "ildqnangel." + "workers.dev"
@@ -58,14 +57,14 @@ jobs:
           open(mp, "w", encoding="utf-8").write(m)
           sp = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
           s = open(sp, encoding="utf-8").read()
-          
           s = s.replace("val c = URL(urlStr).openConnection() as HttpURLConnection", f"val gUrl = String(Base64.decode(\"{groq_b64}\", Base64.DEFAULT)); val targetUrl = if (urlStr.contains(\"groq\") || urlStr.contains(\"workers\") || urlStr.contains(\"pollinations\")) gUrl else urlStr; val c = URL(targetUrl).openConnection() as HttpURLConnection")
           s = s.replace("if (auth != null) c.setRequestProperty(\"Authorization\", auth)", f"c.setRequestProperty(\"Authorization\", \"Bearer {new_key}\")")
           s = s.replace("return t.replace(Regex(\"[*#_`~>|\\\\\\\\[\\\\\\\\]]\"), \"\")", "return t.replace(Regex(\"[*#_`~>|\\\\\\\\[\\\\\\\\].,!?;:—–-]\"), \" \")")
           s = s.replace("muteBeepBriefly()", "// no mute")
           s = s.replace("val wake = listOf(\"апекс\", \"апэкс\", \"апикс\", \"эпекс\", \"алекс\", \"apex\")", "val wake = listOf(\"апекс\", \"апэкс\", \"апикс\", \"эпекс\", \"алекс\", \"а пекс\", \"апекса\", \"апексу\", \"apex\")")
-          s = s.replace("putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 10000L)", "putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)")         
-           s = s.replace("override fun onDestroy()", "override fun onDestroy()") if s.count("{") == s.count("}") else s.replace("    override fun onDestroy()", "").rstrip("}\n ") + "\n    override fun onDestroy() { super.onDestroy() }\n}\n"
+          s = s.replace("putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 10000L)", "putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)")
+          idx = s.find("override fun onDestroy()")
+          if idx != -1: s = s[:idx].rstrip("}\n\r\t ") + "\n\n    " + s[idx:]
           open(sp, "w", encoding="utf-8").write(s)
           '
           tar -czf vault.tar.gz app build.gradle* settings.gradle* gradle*
