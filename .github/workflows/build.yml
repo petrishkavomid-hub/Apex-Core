@@ -73,7 +73,7 @@ jobs:
                             synchronized(chatHistory) {{ chatHistory.add(Pair("user", prompt)); chatHistory.add(Pair("assistant", finalRep!!)); while (chatHistory.size > 30) chatHistory.removeAt(0) }}
                             callback(finalRep!!, "ApexGroq")
                         }} else callback("Ошибка сети ($code). Проверьте VPN.", "Err")"""
-          s = re.sub(r"val \(code, raw\) = postJson\([^\n]+\n[\s\S]*?else callback\(\"Ошибка ИИ \(\$code\)\", \"Err\"\)", hybrid_ai, s, count=1)
+          s = re.sub(r"val \(code, raw\) = postJson\([^\n]+\n[\s\S]*?else callback\(\"Ошибка ИИ \(\$code\)\", \"Err\"\)\s*\}", hybrid_ai, s, count=1)
           s = s.replace("return t.replace(Regex(\"[*#_`~>|\\\\\\\\[\\\\\\\\]]\"), \"\")", "return t.replace(Regex(\"[*#_`~>|\\\\\\\\[\\\\\\\\].,!?;:—–-]\"), \" \")")
           s = s.replace("tts?.speak(c, TextToSpeech.QUEUE_FLUSH, b, \"APEX_LAST\")", "tts?.speak(c, TextToSpeech.QUEUE_FLUSH, null, \"APEX_LAST\")")
           s = s.replace("try { speechRecognizer?.cancel(); speechRecognizer?.destroy() } catch (_: Exception) {}\n                muteBeepBriefly()\n                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)", "if (speechRecognizer == null) { speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this) }")
