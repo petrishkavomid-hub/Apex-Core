@@ -58,13 +58,15 @@ jobs:
             OutputStreamWriter(c.outputStream).use { it.write(payload) }
             val code = c.responseCode
             val txt = (if (code in 200..299) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText() } ?: ""
-            if (code == 429 || txt.contains("перегружены") || txt.contains("Too Many Requests")) {
+            if (code == 429 || txt.contains("перегружены") || txt.contains("Too Many Requests") || txt.contains("invalid_api_key")) {
+                val backupBody = JSONObject(body.toString()).put("model", "llama-3.1-8b-instant")
+                val backupPayload = if (urlStr.contains("workers.dev")) JSONObject().put("ai_chat", backupBody).toString() else backupBody.toString()
                 Thread.sleep(1500)
                 val c2 = URL(urlStr).openConnection() as HttpURLConnection
                 c2.requestMethod = "POST"
                 c2.setRequestProperty("Content-Type", "application/json")
                 c2.connectTimeout = 8000; c2.readTimeout = 20000; c2.doOutput = true
-                OutputStreamWriter(c2.outputStream).use { it.write(payload) }
+                OutputStreamWriter(c2.outputStream).use { it.write(backupPayload) }
                 val code2 = c2.responseCode
                 val txt2 = (if (code2 in 200..299) c2.inputStream else c2.errorStream)?.bufferedReader()?.use { it.readText() } ?: ""
                 return Pair(code2, txt2)
@@ -74,11 +76,7 @@ jobs:
 
           s = s.replace("tts?.setPitch(0.92f)", "tts?.setPitch(0.95f)")
           s = s.replace("tts?.setSpeechRate(1.12f)", "tts?.setSpeechRate(1.04f)")
-
-          old_cycle = "try { speechRecognizer?.cancel(); speechRecognizer?.destroy() } catch (_: Exception) {}\n                muteBeepBriefly()\n                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)"
-          new_cycle = "if (speechRecognizer == null) { speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this) }"
-          s = s.replace(old_cycle, new_cycle)
-
+          s = s.replace("try { speechRecognizer?.cancel(); speechRecognizer?.destroy() } catch (_: Exception) {}\n                muteBeepBriefly()\n                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)", "if (speechRecognizer == null) { speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this) }")
           s = s.replace("try { speechRecognizer?.cancel(); speechRecognizer?.destroy() } catch (_: Exception) {}\n            speechRecognizer = null", "try { speechRecognizer?.cancel() } catch (_: Exception) {}")
           s = s.replace("mainHandler.postDelayed({ startListeningCycle() }, 1500L)", "if (e == SpeechRecognizer.ERROR_CLIENT || e == SpeechRecognizer.ERROR_RECOGNIZER_BUSY) { try { speechRecognizer?.destroy() } catch (_: Exception) {}; speechRecognizer = null }; mainHandler.postDelayed({ startListeningCycle() }, 600L)")
 
