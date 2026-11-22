@@ -62,7 +62,8 @@ jobs:
           s = s.replace("return t.replace(Regex(\"[*#_`~>|\\\\\\\\[\\\\\\\\]]\"), \"\")", "return t.replace(Regex(\"[*#_`~>|\\\\\\\\[\\\\\\\\].,!?;:—–-]\"), \" \")")
           s = s.replace("muteBeepBriefly()", "// no mute")
           s = s.replace("val wake = listOf(\"апекс\", \"апэкс\", \"апикс\", \"эпекс\", \"алекс\", \"apex\")", "val wake = listOf(\"апекс\", \"апэкс\", \"апикс\", \"эпекс\", \"алекс\", \"а пекс\", \"апекса\", \"апексу\", \"apex\")")
-          s = s.replace("putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 10000L)", "putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)")
+          s = s[:s.rfind("override fun onDestroy()")].rstrip("}\n\r\t ") + "\n    }\n    override fun onDestroy() { super.onDestroy() }\n}\n"
+           
           s = s[:s.rfind("override fun onDestroy()")].rstrip("}\n\r\t ") + "\n\n    override fun onDestroy() {\n        super.onDestroy()\n        try { tts?.shutdown(); speechRecognizer?.destroy() } catch (_: Exception) {}\n    }\n}\n"
           open(sp, "w", encoding="utf-8").write(s)
           '
