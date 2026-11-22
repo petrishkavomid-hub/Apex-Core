@@ -21,7 +21,7 @@ jobs:
         env:
           VAULT_PASS: ${{ secrets.VAULT_PASS }}
         run: |
-         git checkout bb021fd -- fix_all.py update_code.py final_fix.py app/src/main/java/com/apex/assistant/ApexCoreService.kt 
+          git checkout bb021fd -- fix_all.py update_code.py final_fix.py
           sed -i 's/^ c2 =/c2 =/; s/^ c3 =/c3 =/' final_fix.py
           pip install pillow -q && python3 final_fix.py
           python3 -c '
@@ -63,8 +63,7 @@ jobs:
           s = s.replace("muteBeepBriefly()", "// no mute")
           s = s.replace("val wake = listOf(\"апекс\", \"апэкс\", \"апикс\", \"эпекс\", \"алекс\", \"apex\")", "val wake = listOf(\"апекс\", \"апэкс\", \"апикс\", \"эпекс\", \"алекс\", \"а пекс\", \"апекса\", \"апексу\", \"apex\")")
           s = s.replace("putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 10000L)", "putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)")
-          s = re.sub(r"\}\s*override fun onDestroy\(\)", "\n    override fun onDestroy()", s)
-          if s.count("{") > s.count("}"): s += "\n" + ("}\n" * (s.count("{") - s.count("}")))
+          s = s[:s.rfind("override fun onDestroy()")].rstrip("}\n\r\t ") + "\n\n    override fun onDestroy() {\n        super.onDestroy()\n        try { tts?.shutdown(); speechRecognizer?.destroy() } catch (_: Exception) {}\n    }\n}\n"
           open(sp, "w", encoding="utf-8").write(s)
           '
           tar -czf vault.tar.gz app build.gradle* settings.gradle* gradle*
