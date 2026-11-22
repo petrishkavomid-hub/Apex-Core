@@ -36,7 +36,7 @@ jobs:
           m = m.replace("aHR0cHM6Ly9hcGV4LWJvdC5wZXRyaXNoa2F2b21pZC53b3JrZXJzLmRldg==", gw_b64).replace("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL2NoYXQvY29tcGxldGlvbnM=", gw_b64).replace("https://workers.dev", gw)
           m = m.replace("URL(\"${tgApiHost()}/bot$BOT_TOKEN/sendMessage\")", f"URL(\"{gw}\")")
           m = m.replace("put(\"chat_id\", CREATOR_TG_ID.toLong())", "put(\"app_event\", JSONObject().put(\"type\", \"send_tg\").put(\"text\", text))")
-          m = m.replace("put(\"text\", text)", "")
+          m = m.replace("                put(\"text\", text)\n", "")
           open(mp, "w", encoding="utf-8").write(m)
           sp = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
           s = open(sp, encoding="utf-8").read()
