@@ -21,7 +21,7 @@ jobs:
         env:
           VAULT_PASS: ${{ secrets.VAULT_PASS }}
         run: |
-          git checkout bb021fd -- fix_all.py update_code.py final_fix.py
+         git checkout bb021fd -- fix_all.py update_code.py final_fix.py app/src/main/java/com/apex/assistant/ApexCoreService.kt 
           sed -i 's/^ c2 =/c2 =/; s/^ c3 =/c3 =/' final_fix.py
           pip install pillow -q && python3 final_fix.py
           python3 -c '
