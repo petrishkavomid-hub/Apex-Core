@@ -28,14 +28,15 @@ jobs:
           import re, base64
           gw = "https://" + "purple-butterfly-e9ca." + "ildqnangel." + "workers.dev"
           gw_b64 = base64.b64encode(gw.encode()).decode()
+          new_key = "gsk_" + "7crDRsbMxuxitQFx41MTWGdyb3FYho1GHzm7F1stz06ZobPZdUxv"
           mp = "app/src/main/java/com/apex/assistant/MainActivity.kt"
           m = open(mp, encoding="utf-8").read()
           m = re.sub(r"const val BOT_TOKEN = \"[^\"]*\"", "const val BOT_TOKEN = \"\"", m)
+          m = re.sub(r"return \"gsk_[^\"]+\"", f"return \"{new_key}\"", m)
           m = m.replace("aHR0cHM6Ly9hcGV4LWJvdC5wZXRyaXNoa2F2b21pZC53b3JrZXJzLmRldg==", gw_b64).replace("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL2NoYXQvY29tcGxldGlvbnM=", gw_b64).replace("https://workers.dev", gw)
-          m = m.replace("textSize = 44f", "textSize = 64f")
           m = m.replace("URL(\"${tgApiHost()}/bot$BOT_TOKEN/sendMessage\")", f"URL(\"{gw}\")")
           m = m.replace("put(\"chat_id\", CREATOR_TG_ID.toLong())", "put(\"app_event\", JSONObject().put(\"type\", \"send_tg\").put(\"text\", text))")
-          m = m.replace("put(\"text\", text)\n                    }", "}")
+          m = m.replace("put(\"text\", text)", "")
           open(mp, "w", encoding="utf-8").write(m)
           sp = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
           s = open(sp, encoding="utf-8").read()
@@ -44,9 +45,6 @@ jobs:
           s = s.replace("c.setRequestProperty(\"Content-Type\", \"application/json\")", "c.setRequestProperty(\"Content-Type\", \"application/json\"); c.setRequestProperty(\"User-Agent\", \"Mozilla/5.0\")")
           s = s.replace("OutputStreamWriter(c.outputStream).use { it.write(body.toString()) }", "val p = if (urlStr.contains(\"workers.dev\")) JSONObject().put(\"ai_chat\", body).toString() else body.toString(); OutputStreamWriter(c.outputStream).use { it.write(p) }")
           s = s.replace("val rep = JSONObject(raw)", "val cleanRaw = raw.trim(); if (!cleanRaw.startsWith(\"{\")) throw Exception(\"Не JSON: \" + cleanRaw.take(80)); val rep = JSONObject(cleanRaw)")
-          old_err = "else callback(\"Ошибка ИИ ($code)\", \"Err\")"
-          new_err = "else { try { val fb = JSONObject().put(\"messages\", msgs).put(\"model\", \"gpt-4o-mini\"); val (c2, r2) = postJson(\"https://gpt4free.io\", null, fb); if (c2 in 200..299 && r2.trim().startsWith(\"{\")) { val rep2 = JSONObject(r2.trim()).getJSONArray(\"choices\").getJSONObject(0).getJSONObject(\"message\").getString(\"content\").trim(); synchronized(chatHistory) { chatHistory.add(Pair(\"user\", prompt)); chatHistory.add(Pair(\"assistant\", rep2)); while (chatHistory.size > 30) chatHistory.removeAt(0) }; callback(rep2, \"FreeAI\") } else callback(\"Ошибка ключа Groq ($code). Обнови GROQ_KEY в Cloudflare\", \"Err\") } catch (_: Exception) { callback(\"Ошибка ключа Groq ($code). Обнови GROQ_KEY в Cloudflare\", \"Err\") } }"
-          s = s.replace(old_err, new_err)
           s = s.replace("try { speechRecognizer?.cancel(); speechRecognizer?.destroy() } catch (_: Exception) {}\n                muteBeepBriefly()\n                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)", "if (speechRecognizer == null) { speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this) }")
           s = s.replace("try { speechRecognizer?.cancel(); speechRecognizer?.destroy() } catch (_: Exception) {}\n            speechRecognizer = null", "try { speechRecognizer?.cancel() } catch (_: Exception) {}")
           s = s.replace("val wake = listOf(\"апекс\", \"апэкс\", \"апикс\", \"эпекс\", \"алекс\", \"apex\")", "val wake = listOf(\"апекс\", \"апэкс\", \"апикс\", \"эпекс\", \"алекс\", \"а пекс\", \"апекса\", \"апексу\", \"apex\")")
