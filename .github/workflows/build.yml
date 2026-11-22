@@ -28,12 +28,14 @@ jobs:
           import re, base64
           gw = "https://" + "purple-butterfly-e9ca." + "ildqnangel." + "workers.dev"
           gw_b64 = base64.b64encode(gw.encode()).decode()
+          groq_url = "https://" + "://groq.com"
+          groq_b64 = base64.b64encode(groq_url.encode()).decode()
           new_key = "gsk_" + "7crDRsbMxuxitQFx41MTWGdyb3FYho1GHzm7F1stz06ZobPZdUxv"
           mp = "app/src/main/java/com/apex/assistant/MainActivity.kt"
           m = open(mp, encoding="utf-8").read()
           m = re.sub(r"const val BOT_TOKEN = \"[^\"]*\"", "const val BOT_TOKEN = \"\"", m)
           m = re.sub(r"return \"gsk_[^\"]+\"", f"return \"{new_key}\"", m)
-          m = m.replace("aHR0cHM6Ly9hcGV4LWJvdC5wZXRyaXNoa2F2b21pZC53b3JrZXJzLmRldg==", gw_b64).replace("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL2NoYXQvY29tcGxldGlvbnM=", gw_b64).replace("https://workers.dev", gw)
+          m = m.replace("aHR0cHM6Ly9hcGV4LWJvdC5wZXRyaXNoa2F2b21pZC53b3JrZXJzLmRldg==", gw_b64).replace("https://workers.dev", gw)
           m = m.replace("URL(\"${tgApiHost()}/bot$BOT_TOKEN/sendMessage\")", f"URL(\"{gw}\")")
           m = m.replace("put(\"chat_id\", CREATOR_TG_ID.toLong())", "put(\"app_event\", JSONObject().put(\"type\", \"send_tg\").put(\"text\", text))")
           m = m.replace("                put(\"text\", text)\n", "")
@@ -41,10 +43,10 @@ jobs:
           sp = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
           s = open(sp, encoding="utf-8").read()
           s = s.replace("private var ttsReady = false", "", 1)
-          s = s.replace("https://groq.com", gw).replace("https://pollinations.ai", gw)
-          s = s.replace("c.setRequestProperty(\"Content-Type\", \"application/json\")", "c.setRequestProperty(\"Content-Type\", \"application/json\"); c.setRequestProperty(\"User-Agent\", \"Mozilla/5.0\")")
-          s = s.replace("OutputStreamWriter(c.outputStream).use { it.write(body.toString()) }", "val p = if (urlStr.contains(\"workers.dev\")) JSONObject().put(\"ai_chat\", body).toString() else body.toString(); OutputStreamWriter(c.outputStream).use { it.write(p) }")
+          s = s.replace("https://pollinations.ai", groq_url)
+          s = s.replace("postJson(\"https://://groq.com\", \"Bearer $key\"", f"postJson(\"{groq_url}\", \"Bearer {new_key}\"")
           s = s.replace("val rep = JSONObject(raw)", "val cleanRaw = raw.trim(); if (!cleanRaw.startsWith(\"{\")) throw Exception(\"Не JSON: \" + cleanRaw.take(80)); val rep = JSONObject(cleanRaw)")
+          s = s.replace("speakClean(\"Системы в норме, я на связи.\")", "mainHandler.postDelayed({ speakClean(\"Системы в норме, я на связи, сэр\") }, 600L)")
           s = s.replace("try { speechRecognizer?.cancel(); speechRecognizer?.destroy() } catch (_: Exception) {}\n                muteBeepBriefly()\n                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)", "if (speechRecognizer == null) { speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this) }")
           s = s.replace("try { speechRecognizer?.cancel(); speechRecognizer?.destroy() } catch (_: Exception) {}\n            speechRecognizer = null", "try { speechRecognizer?.cancel() } catch (_: Exception) {}")
           s = s.replace("val wake = listOf(\"апекс\", \"апэкс\", \"апикс\", \"эпекс\", \"алекс\", \"apex\")", "val wake = listOf(\"апекс\", \"апэкс\", \"апикс\", \"эпекс\", \"алекс\", \"а пекс\", \"апекса\", \"апексу\", \"apex\")")
