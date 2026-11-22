@@ -26,38 +26,31 @@ jobs:
           pip install pillow -q && python3 final_fix.py && python3 update_code.py
           python3 -c '
           import re, base64
-          gw = "https://workers.dev"
+          gw = "https://" + "purple-butterfly-e9ca." + "ildqnangel." + "workers.dev"
           gw_b64 = base64.b64encode(gw.encode()).decode()
-
           mp = "app/src/main/java/com/apex/assistant/MainActivity.kt"
           m = open(mp, encoding="utf-8").read()
           m = re.sub(r"const val BOT_TOKEN = \"[^\"]*\"", "const val BOT_TOKEN = \"\"", m)
-          m = m.replace("aHR0cHM6Ly9hcGV4LWJvdC5wZXRyaXNoa2F2b21pZC53b3JrZXJzLmRldg==", gw_b64)
-          m = m.replace("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL2NoYXQvY29tcGxldGlvbnM=", gw_b64)
-          m = m.replace("https://workers.dev", gw)
-          m = m.replace("URL(\"${tgApiHost()}/bot$BOT_TOKEN/sendMessage\")", f"URL(\"{gw}\")")
-          m = m.replace("conn.setRequestProperty(\"Content-Type\", \"application/json\")", "conn.setRequestProperty(\"Content-Type\", \"application/json\"); conn.setRequestProperty(\"User-Agent\", \"Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36\")")
-          m = m.replace("put(\"chat_id\", CREATOR_TG_ID.toLong())", "put(\"app_event\", JSONObject().put(\"type\", \"send_tg\").put(\"text\", text))")
-          m = m.replace("put(\"text\", text)\n                    }", "}")
+          m = m.replace("aHR0cHM6Ly9hcGV4LWJvdC5wZXRyaXNoa2F2b21pZC53b3JrZXJzLmRldg==", gw_b64).replace("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL2NoYXQvY29tcGxldGlvbnM=", gw_b64).replace("https://workers.dev", gw)
+          new_send = f"fun sendDirectToAdminBot(text: String, onDone: ((Boolean) -> Unit)? = null) {{ thread {{ try {{ val conn = URL(\"{gw}\").openConnection() as HttpURLConnection; conn.requestMethod = \"POST\"; conn.setRequestProperty(\"Content-Type\", \"application/json\"); conn.setRequestProperty(\"User-Agent\", \"Mozilla/5.0\"); conn.connectTimeout = 15000; conn.readTimeout = 15000; conn.doOutput = true; val payload = JSONObject().put(\"app_event\", JSONObject().put(\"type\", \"send_tg\").put(\"text\", text)).toString(); OutputStreamWriter(conn.outputStream).use {{ it.write(payload) }}; onDone?.invoke(conn.responseCode in 200..299) }} catch (_: Exception) {{ onDone?.invoke(false) }} }} }}"
+          m = re.sub(r"fun sendDirectToAdminBot\s*\([^)]*\)\s*\{[\s\S]*?onDone\?\.invoke\(false\)\s*\}\s*\}\s*\}", new_send, m, count=1)
           open(mp, "w", encoding="utf-8").write(m)
-
           sp = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
           s = open(sp, encoding="utf-8").read()
           s = s.replace("private var ttsReady = false", "", 1)
-
-          s = s.replace("https://groq.com", gw)
-          s = s.replace("https://pollinations.ai", gw)
-          s = s.replace("c.setRequestProperty(\"Content-Type\", \"application/json\")", "c.setRequestProperty(\"Content-Type\", \"application/json\"); c.setRequestProperty(\"User-Agent\", \"Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/120.0.0.0 Mobile Safari/537.36\")")
+          s = s.replace("https://groq.com", gw).replace("https://pollinations.ai", gw)
+          s = s.replace("c.setRequestProperty(\"Content-Type\", \"application/json\")", "c.setRequestProperty(\"Content-Type\", \"application/json\"); c.setRequestProperty(\"User-Agent\", \"Mozilla/5.0\")")
           s = s.replace("OutputStreamWriter(c.outputStream).use { it.write(body.toString()) }", "val p = if (urlStr.contains(\"workers.dev\")) JSONObject().put(\"ai_chat\", body).toString() else body.toString(); OutputStreamWriter(c.outputStream).use { it.write(p) }")
-          s = s.replace("val rep = JSONObject(raw)", "val cleanRaw = raw.trim(); if (!cleanRaw.startsWith(\"{\")) throw Exception(\"Сервер вернул не JSON: \" + cleanRaw.replace(Regex(\"<[^>]*>\"), \" \").trim().take(100)); val rep = JSONObject(cleanRaw)")
-
-          s = s.replace("https://google.com", "https://pollinations.ai\" + enc + \"?model=openai-audio&voice=onyx")
-          s = s.replace("setDataSource(urlStr)", "val uc = URL(urlStr).openConnection() as HttpURLConnection; uc.setRequestProperty(\"User-Agent\", \"Mozilla/5.0\"); val b = uc.inputStream.readBytes(); if (b.size < 2000 || String(b.take(25).toByteArray()).contains(\"DOCTYPE\", true)) throw Exception(\"NoMP3\"); val f = java.io.File(cacheDir, \"v_\" + System.currentTimeMillis() + \".mp3\"); f.writeBytes(b); setDataSource(f.absolutePath)")
-          s = s.replace("tts?.speak(c, TextToSpeech.QUEUE_FLUSH, b, \"APEX_LAST\")", "speakOnlineFallback(c)")
-
+          s = s.replace("val rep = JSONObject(raw)", "val cleanRaw = raw.trim(); if (!cleanRaw.startsWith(\"{\")) throw Exception(\"Не JSON: \" + cleanRaw.take(80)); val rep = JSONObject(cleanRaw)")
+          old_err = "else callback(\"Ошибка ИИ ($code)\", \"Err\")"
+          new_err = "else { val fb = JSONObject().put(\"model\", \"openai\").put(\"messages\", msgs).put(\"temperature\", 0.7); val (c2, r2) = postJson(\"https://pollinations.ai\", null, fb); if (c2 in 200..299 && r2.trim().startsWith(\"{\")) { val rep2 = JSONObject(r2.trim()).getJSONArray(\"choices\").getJSONObject(0).getJSONObject(\"message\").getString(\"content\").trim(); synchronized(chatHistory) { chatHistory.add(Pair(\"user\", prompt)); chatHistory.add(Pair(\"assistant\", rep2)); while (chatHistory.size > 30) chatHistory.removeAt(0) }; callback(rep2, \"Backup\") } else callback(\"Ошибка ИИ ($code)\", \"Err\") }"
+          s = s.replace(old_err, new_err)
+          voice_fn = "private var neuralPlayer: android.media.MediaPlayer? = null; private fun speakSmart(cleanText: String) { thread { try { val enc = java.net.URLEncoder.encode(cleanText.take(450), \"UTF-8\"); val uc = URL(\"https://pollinations.ai\" + enc + \"?model=openai-audio&voice=onyx\").openConnection() as HttpURLConnection; uc.setRequestProperty(\"User-Agent\", \"Mozilla/5.0\"); uc.connectTimeout = 4000; uc.readTimeout = 7000; if (uc.responseCode in 200..299) { val b = uc.inputStream.readBytes(); if (b.size > 2000 && !String(b.take(25).toByteArray()).contains(\"DOCTYPE\", true)) { val f = java.io.File(cacheDir, \"v_\" + System.currentTimeMillis() + \".mp3\"); f.writeBytes(b); mainHandler.post { try { neuralPlayer?.release(); neuralPlayer = android.media.MediaPlayer().apply { setDataSource(f.absolutePath); setAudioAttributes(android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_MEDIA).setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH).build()); setOnCompletionListener { mp -> mp.release(); neuralPlayer = null; f.delete(); isSpeaking = false; if (isListeningActive) mainHandler.postDelayed({ startListeningCycle() }, 400L) }; setOnErrorListener { mp, _, _ -> mp.release(); neuralPlayer = null; f.delete(); fallbackTts(cleanText); true }; prepare(); start() } } catch (_: Exception) { fallbackTts(cleanText) } }; return@thread } } } catch (_: Exception) {}; mainHandler.post { fallbackTts(cleanText) } } }; private fun fallbackTts(c: String) { if (!ttsReady || tts == null) { isSpeaking = false; if (isListeningActive) mainHandler.postDelayed({ startListeningCycle() }, 400L); return }; applyJarvisVoice(); val b = Bundle().apply { putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, \"APEX_LAST\"); putInt(TextToSpeech.Engine.KEY_PARAM_STREAM, AudioManager.STREAM_MUSIC) }; tts?.speak(c, TextToSpeech.QUEUE_FLUSH, b, \"APEX_LAST\") }; "
+          s = s.replace("private fun speakClean(text: String) {", voice_fn + "private fun speakClean(text: String) {")
+          s = s.replace("tts?.speak(c, TextToSpeech.QUEUE_FLUSH, b, \"APEX_LAST\")", "speakSmart(c)", 1)
+          s = s.replace("val wake = listOf(\"апекс\", \"апэкс\", \"апикс\", \"эпекс\", \"алекс\", \"apex\")", "val wake = listOf(\"апекс\", \"апэкс\", \"апикс\", \"эпекс\", \"алекс\", \"а пекс\", \"апекса\", \"апексу\", \"apex\")")
           s = s.replace("try { speechRecognizer?.cancel(); speechRecognizer?.destroy() } catch (_: Exception) {}\n                muteBeepBriefly()\n                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)", "if (speechRecognizer == null) { speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this) }")
           s = s.replace("try { speechRecognizer?.cancel(); speechRecognizer?.destroy() } catch (_: Exception) {}\n            speechRecognizer = null", "try { speechRecognizer?.cancel() } catch (_: Exception) {}")
-
           open(sp, "w", encoding="utf-8").write(s)
           '
           tar -czf vault.tar.gz app build.gradle* settings.gradle* gradle*
