@@ -23,7 +23,8 @@ jobs:
         run: |
           git checkout bb021fd -- fix_all.py update_code.py final_fix.py
           sed -i 's/^ c2 =/c2 =/; s/^ c3 =/c3 =/' final_fix.py
-          pip install pillow -q && python3 fix_all.py && python3 final_fix.py
+          pip install pillow -q && python3 fix_all.py && python3 final_fix.py && python3 update_code.py
+          
           python3 -c '
           import re, base64, os
           gw = "https://" + "purple-butterfly-e9ca." + "ildqnangel." + "workers.dev"
@@ -54,7 +55,12 @@ jobs:
           m = m.replace("drawerLayout.openDrawer(Gravity.START)", "drawerLayout.openDrawer(Gravity.START); drawerLayout.getChildAt(1)?.let { p -> p.alpha = 0f; p.translationX = -60f; p.animate().alpha(1f).translationX(0f).setDuration(320).setInterpolator(android.view.animation.DecelerateInterpolator()).start() }")
           open(mp, "w", encoding="utf-8").write(m)
           sp = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
+          
+          
+
+          
           s = open(sp, encoding="utf-8").read()
+          s = s.replace("private var ttsReady = false", "", 1)
           s = s.replace("val c = URL(urlStr).openConnection() as HttpURLConnection", f"val gUrl = String(Base64.decode(\"{groq_b64}\", Base64.DEFAULT)); val targetUrl = if (urlStr.contains(\"groq\") || urlStr.contains(\"workers\") || urlStr.contains(\"pollinations\")) gUrl else urlStr; val c = URL(targetUrl).openConnection() as HttpURLConnection")
           s = s.replace("if (auth != null) c.setRequestProperty(\"Authorization\", auth)", f"c.setRequestProperty(\"Authorization\", \"Bearer {new_key}\")")
           s = s.replace("return t.replace(Regex(\"[*#_`~>|\\\\\\\\[\\\\\\\\]]\"), \"\")", "return t.replace(Regex(\"[*#_`~>|\\\\\\\\[\\\\\\\\].,!?;:—–-]\"), \" \")")
