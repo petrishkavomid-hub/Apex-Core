@@ -29,7 +29,6 @@ jobs:
           gw = "https://" + "purple-butterfly-e9ca." + "ildqnangel." + "workers.dev"
           gw_b64 = base64.b64encode(gw.encode()).decode()
           groq_url = "https://" + "://groq.com"
-          groq_b64 = base64.b64encode(groq_url.encode()).decode()
           new_key = "gsk_" + "7crDRsbMxuxitQFx41MTWGdyb3FYho1GHzm7F1stz06ZobPZdUxv"
           mp = "app/src/main/java/com/apex/assistant/MainActivity.kt"
           m = open(mp, encoding="utf-8").read()
@@ -39,14 +38,48 @@ jobs:
           m = m.replace("URL(\"${tgApiHost()}/bot$BOT_TOKEN/sendMessage\")", f"URL(\"{gw}\")")
           m = m.replace("put(\"chat_id\", CREATOR_TG_ID.toLong())", "put(\"app_event\", JSONObject().put(\"type\", \"send_tg\").put(\"text\", text))")
           m = m.replace("                put(\"text\", text)\n", "")
+          # Крупный центральный логотип с живой анимацией дыхания
+          m = m.replace("textSize = 44f", "textSize = 58f")
+          m = m.replace("cornerRadius = 36f", "cornerRadius = 56f")
+          anim_logo = "elevation = 16f\n            android.animation.ObjectAnimator.ofPropertyValuesHolder(this, android.animation.PropertyValuesHolder.ofFloat(\"scaleX\", 1f, 1.07f, 1f), android.animation.PropertyValuesHolder.ofFloat(\"scaleY\", 1f, 1.07f, 1f), android.animation.PropertyValuesHolder.ofFloat(\"alpha\", 0.9f, 1f, 0.9f)).apply { duration = 2600; repeatCount = android.animation.ValueAnimator.INFINITE; interpolator = android.view.animation.AccelerateDecelerateInterpolator(); start() }"
+          m = m.replace("elevation = 8f", anim_logo, 1)
+          # Живая ровная волна индикатора Думаю...
+          m = m.replace("arrayOf(\"Думаю •  \", \"Думаю  • \", \"Думаю   •\", \"Думаю •••\")", "arrayOf(\"Апекс думает  ● ○ ○\", \"Апекс думает  ○ ● ○\", \"Апекс думает  ○ ○ ●\", \"Апекс думает  ● ● ●\")")
+          m = m.replace("hAnim.postDelayed(this, 300)", "hAnim.postDelayed(this, 220)")
           open(mp, "w", encoding="utf-8").write(m)
           sp = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
           s = open(sp, encoding="utf-8").read()
           s = s.replace("private var ttsReady = false", "", 1)
-          s = s.replace("https://pollinations.ai", groq_url)
-          s = s.replace("postJson(\"https://://groq.com\", \"Bearer $key\"", f"postJson(\"{groq_url}\", \"Bearer {new_key}\"")
-          s = s.replace("val rep = JSONObject(raw)", "val cleanRaw = raw.trim(); if (!cleanRaw.startsWith(\"{\")) throw Exception(\"Не JSON: \" + cleanRaw.take(80)); val rep = JSONObject(cleanRaw)")
-          s = s.replace("speakClean(\"Системы в норме, я на связи.\")", "mainHandler.postDelayed({ speakClean(\"Системы в норме, я на связи, сэр\") }, 600L)")
+          # Гибрид: 1) Быстрый Groq Llama-3.3-70B с твоим ключом -> 2) Резерв без ключа при лимите
+          hybrid_ai = f"""val (code, raw) = postJson("{groq_url}", "Bearer {new_key}", JSONObject().put("model", "llama-3.3-70b-versatile").put("messages", msgs).put("temperature", 0.75).put("max_tokens", 1500))
+                        var finalRep: String? = null
+                        if (code in 200..299 && raw.trim().startsWith("{{")) {{
+                            finalRep = JSONObject(raw.trim()).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim()
+                        }}
+                        if (finalRep.isNullOrEmpty()) {{
+                            val (c2, r2) = postJson("https://deepinfra.com", null, JSONObject().put("model", "meta-llama/Meta-Llama-3.1-70B-Instruct").put("messages", msgs).put("max_tokens", 1000))
+                            if (c2 in 200..299 && r2.trim().startsWith("{{")) {{
+                                finalRep = JSONObject(r2.trim()).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim()
+                            }}
+                        }}
+                        if (finalRep.isNullOrEmpty()) {{
+                            val getUrl = "https://pollinations.ai" + Uri.encode("Ты умный и живой голосовой ассистент Apex AI от Derek Stealth. Отвечай по-русски живо и по делу. Вопрос: " + prompt)
+                            val uc = URL(getUrl).openConnection() as HttpURLConnection
+                            uc.setRequestProperty("User-Agent", "Mozilla/5.0")
+                            uc.connectTimeout = 8000; uc.readTimeout = 20000
+                            if (uc.responseCode in 200..299) {{
+                                val txtGet = uc.inputStream.bufferedReader().use {{ it.readText() }}.trim()
+                                if (txtGet.isNotEmpty() && !txtGet.startsWith("<")) finalRep = txtGet
+                            }}
+                        }}
+                        if (!finalRep.isNullOrEmpty()) {{
+                            synchronized(chatHistory) {{ chatHistory.add(Pair("user", prompt)); chatHistory.add(Pair("assistant", finalRep!!)); while (chatHistory.size > 30) chatHistory.removeAt(0) }}
+                            callback(finalRep!!, "ApexGroq")
+                        }} else callback("Ошибка сети ($code). Проверьте VPN.", "Err")"""
+          s = re.sub(r'val \(code, raw\) = postJson\([^\n]+\n[\s\S]*?else callback\("Ошибка ИИ \(\$code\)", "Err"\)', hybrid_ai, s, count=1)
+          # Фикс голоса: убираем знаки препинания (никогда не скажет "точка" или "запятая")
+          s = s.replace("return t.replace(Regex(\"[*#_`~>|\\\\\\\\[\\\\\\\\]]\"), \"\")", "return t.replace(Regex(\"[*#_`~>|\\\\\\\\[\\\\\\\\].,!?;:—–-]\"), \" \")")
+          s = s.replace("tts?.speak(c, TextToSpeech.QUEUE_FLUSH, b, \"APEX_LAST\")", "tts?.speak(c, TextToSpeech.QUEUE_FLUSH, null, \"APEX_LAST\")")
           s = s.replace("try { speechRecognizer?.cancel(); speechRecognizer?.destroy() } catch (_: Exception) {}\n                muteBeepBriefly()\n                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)", "if (speechRecognizer == null) { speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this) }")
           s = s.replace("try { speechRecognizer?.cancel(); speechRecognizer?.destroy() } catch (_: Exception) {}\n            speechRecognizer = null", "try { speechRecognizer?.cancel() } catch (_: Exception) {}")
           s = s.replace("val wake = listOf(\"апекс\", \"апэкс\", \"апикс\", \"эпекс\", \"алекс\", \"apex\")", "val wake = listOf(\"апекс\", \"апэкс\", \"апикс\", \"эпекс\", \"алекс\", \"а пекс\", \"апекса\", \"апексу\", \"apex\")")
