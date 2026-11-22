@@ -38,19 +38,16 @@ jobs:
           m = m.replace("URL(\"${tgApiHost()}/bot$BOT_TOKEN/sendMessage\")", f"URL(\"{gw}\")")
           m = m.replace("put(\"chat_id\", CREATOR_TG_ID.toLong())", "put(\"app_event\", JSONObject().put(\"type\", \"send_tg\").put(\"text\", text))")
           m = m.replace("                put(\"text\", text)\n", "")
-          # Крупный центральный логотип с живой анимацией дыхания
           m = m.replace("textSize = 44f", "textSize = 58f")
           m = m.replace("cornerRadius = 36f", "cornerRadius = 56f")
           anim_logo = "elevation = 16f\n            android.animation.ObjectAnimator.ofPropertyValuesHolder(this, android.animation.PropertyValuesHolder.ofFloat(\"scaleX\", 1f, 1.07f, 1f), android.animation.PropertyValuesHolder.ofFloat(\"scaleY\", 1f, 1.07f, 1f), android.animation.PropertyValuesHolder.ofFloat(\"alpha\", 0.9f, 1f, 0.9f)).apply { duration = 2600; repeatCount = android.animation.ValueAnimator.INFINITE; interpolator = android.view.animation.AccelerateDecelerateInterpolator(); start() }"
           m = m.replace("elevation = 8f", anim_logo, 1)
-          # Живая ровная волна индикатора Думаю...
           m = m.replace("arrayOf(\"Думаю •  \", \"Думаю  • \", \"Думаю   •\", \"Думаю •••\")", "arrayOf(\"Апекс думает  ● ○ ○\", \"Апекс думает  ○ ● ○\", \"Апекс думает  ○ ○ ●\", \"Апекс думает  ● ● ●\")")
           m = m.replace("hAnim.postDelayed(this, 300)", "hAnim.postDelayed(this, 220)")
           open(mp, "w", encoding="utf-8").write(m)
           sp = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
           s = open(sp, encoding="utf-8").read()
           s = s.replace("private var ttsReady = false", "", 1)
-          # Гибрид: 1) Быстрый Groq Llama-3.3-70B с твоим ключом -> 2) Резерв без ключа при лимите
           hybrid_ai = f"""val (code, raw) = postJson("{groq_url}", "Bearer {new_key}", JSONObject().put("model", "llama-3.3-70b-versatile").put("messages", msgs).put("temperature", 0.75).put("max_tokens", 1500))
                         var finalRep: String? = null
                         if (code in 200..299 && raw.trim().startsWith("{{")) {{
@@ -76,8 +73,7 @@ jobs:
                             synchronized(chatHistory) {{ chatHistory.add(Pair("user", prompt)); chatHistory.add(Pair("assistant", finalRep!!)); while (chatHistory.size > 30) chatHistory.removeAt(0) }}
                             callback(finalRep!!, "ApexGroq")
                         }} else callback("Ошибка сети ($code). Проверьте VPN.", "Err")"""
-          s = re.sub(r'val \(code, raw\) = postJson\([^\n]+\n[\s\S]*?else callback\("Ошибка ИИ \(\$code\)", "Err"\)', hybrid_ai, s, count=1)
-          # Фикс голоса: убираем знаки препинания (никогда не скажет "точка" или "запятая")
+          s = re.sub(r"val \(code, raw\) = postJson\([^\n]+\n[\s\S]*?else callback\(\"Ошибка ИИ \(\$code\)\", \"Err\"\)", hybrid_ai, s, count=1)
           s = s.replace("return t.replace(Regex(\"[*#_`~>|\\\\\\\\[\\\\\\\\]]\"), \"\")", "return t.replace(Regex(\"[*#_`~>|\\\\\\\\[\\\\\\\\].,!?;:—–-]\"), \" \")")
           s = s.replace("tts?.speak(c, TextToSpeech.QUEUE_FLUSH, b, \"APEX_LAST\")", "tts?.speak(c, TextToSpeech.QUEUE_FLUSH, null, \"APEX_LAST\")")
           s = s.replace("try { speechRecognizer?.cancel(); speechRecognizer?.destroy() } catch (_: Exception) {}\n                muteBeepBriefly()\n                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)", "if (speechRecognizer == null) { speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this) }")
