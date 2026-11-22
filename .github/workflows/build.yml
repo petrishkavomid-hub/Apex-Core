@@ -48,32 +48,9 @@ jobs:
           sp = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
           s = open(sp, encoding="utf-8").read()
           s = s.replace("private var ttsReady = false", "", 1)
-          hybrid_ai = f"""val (code, raw) = postJson("{groq_url}", "Bearer {new_key}", JSONObject().put("model", "llama-3.3-70b-versatile").put("messages", msgs).put("temperature", 0.75).put("max_tokens", 1500))
-                        var finalRep: String? = null
-                        if (code in 200..299 && raw.trim().startsWith("{{")) {{
-                            finalRep = JSONObject(raw.trim()).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim()
-                        }}
-                        if (finalRep.isNullOrEmpty()) {{
-                            val (c2, r2) = postJson("https://deepinfra.com", null, JSONObject().put("model", "meta-llama/Meta-Llama-3.1-70B-Instruct").put("messages", msgs).put("max_tokens", 1000))
-                            if (c2 in 200..299 && r2.trim().startsWith("{{")) {{
-                                finalRep = JSONObject(r2.trim()).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim()
-                            }}
-                        }}
-                        if (finalRep.isNullOrEmpty()) {{
-                            val getUrl = "https://pollinations.ai" + Uri.encode("Ты умный и живой голосовой ассистент Apex AI от Derek Stealth. Отвечай по-русски живо и по делу. Вопрос: " + prompt)
-                            val uc = URL(getUrl).openConnection() as HttpURLConnection
-                            uc.setRequestProperty("User-Agent", "Mozilla/5.0")
-                            uc.connectTimeout = 8000; uc.readTimeout = 20000
-                            if (uc.responseCode in 200..299) {{
-                                val txtGet = uc.inputStream.bufferedReader().use {{ it.readText() }}.trim()
-                                if (txtGet.isNotEmpty() && !txtGet.startsWith("<")) finalRep = txtGet
-                            }}
-                        }}
-                        if (!finalRep.isNullOrEmpty()) {{
-                            synchronized(chatHistory) {{ chatHistory.add(Pair("user", prompt)); chatHistory.add(Pair("assistant", finalRep!!)); while (chatHistory.size > 30) chatHistory.removeAt(0) }}
-                            callback(finalRep!!, "ApexGroq")
-                        }} else callback("Ошибка сети ($code). Проверьте VPN.", "Err")"""
-          s = re.sub(r"val \(code, raw\) = postJson\([^\n]+\n[\s\S]*?else callback\(\"Ошибка ИИ \(\$code\)\", \"Err\"\)\s*\}", hybrid_ai, s, count=1)
+          s = s.replace("\"Bearer $key\"", f"\"Bearer {new_key}\"")
+          backup_branch = "else { val (c2, r2) = postJson(\"https://deepinfra.com\", null, JSONObject().put(\"model\", \"meta-llama/Meta-Llama-3.1-70B-Instruct\").put(\"messages\", msgs).put(\"max_tokens\", 1000)); if (c2 in 200..299 && r2.trim().startsWith(\"{\")) { val rep2 = JSONObject(r2.trim()).getJSONArray(\"choices\").getJSONObject(0).getJSONObject(\"message\").getString(\"content\").trim(); synchronized(chatHistory) { chatHistory.add(Pair(\"user\", prompt)); chatHistory.add(Pair(\"assistant\", rep2)); while (chatHistory.size > 30) chatHistory.removeAt(0) }; callback(rep2, \"Backup\") } else callback(\"Ошибка ИИ ($code)\", \"Err\") }"
+          s = s.replace("else callback(\"Ошибка ИИ ($code)\", \"Err\")", backup_branch)
           s = s.replace("return t.replace(Regex(\"[*#_`~>|\\\\\\\\[\\\\\\\\]]\"), \"\")", "return t.replace(Regex(\"[*#_`~>|\\\\\\\\[\\\\\\\\].,!?;:—–-]\"), \" \")")
           s = s.replace("tts?.speak(c, TextToSpeech.QUEUE_FLUSH, b, \"APEX_LAST\")", "tts?.speak(c, TextToSpeech.QUEUE_FLUSH, null, \"APEX_LAST\")")
           s = s.replace("try { speechRecognizer?.cancel(); speechRecognizer?.destroy() } catch (_: Exception) {}\n                muteBeepBriefly()\n                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)", "if (speechRecognizer == null) { speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this) }")
