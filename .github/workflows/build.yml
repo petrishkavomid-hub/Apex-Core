@@ -28,7 +28,6 @@ jobs:
           gw = "https://workers.dev"
           gw_b64 = base64.b64encode(gw.encode()).decode()
 
-          # 1. Патчим MainActivity.kt (оценки -> в твой воркер, UI и иконки не трогаем)
           mp = "app/src/main/java/com/apex/assistant/MainActivity.kt"
           m = open(mp, encoding="utf-8").read()
           m = re.sub(r"const val BOT_TOKEN = \"[^\"]*\"", "const val BOT_TOKEN = \"\"", m)
@@ -40,26 +39,26 @@ jobs:
           m = re.sub(r"put\(\"text\",\s*text\)\s*\}", "}", m)
           open(mp, "w", encoding="utf-8").write(m)
 
-          # 2. Патчим сгенерированный ApexCoreService.kt
           sp = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
           s = open(sp, encoding="utf-8").read()
 
-          # Направляем ИИ в твой воркер
+          # 1. Вырезаем fetchModels (именно он ловил <!DOCTYPE HTML!)
+          s = s.replace("val ids = fetchModels(key)", "val ids = listOf(\"llama-3.3-70b-versatile\")")
           s = re.sub(r"postJson\(\"[^\"]+\",\s*\"Bearer \$key\",\s*bodyGroq\)", f"postJson(\"{gw}\", null, bodyGroq)", s)
           s = re.sub(r"postJson\(\"[^\"]+\",\s*pKey,\s*body\)", f"postJson(\"{gw}\", null, body)", s)
           s = s.replace("OutputStreamWriter(c.outputStream).use { it.write(body.toString()) }", "val payload = if (urlStr.contains(\"workers.dev\")) JSONObject().put(\"ai_chat\", body).toString() else body.toString(); OutputStreamWriter(c.outputStream).use { it.write(payload) }")
 
-          # Отключаем startStopListener (причина самоперебивания и бульканья)
-          s = s.replace("mainHandler.postDelayed({ startStopListener() }, 200)", "// disabled self-interrupt")
-          s = s.replace("private fun startStopListener() {", "private fun startStopListener() { return;")
+          # 2. Убиваем самоперебивание и бульканье микрофона
+          s = s.replace("mainHandler.postDelayed({ startStopListener() }, 200)", "")
+          s = s.replace("private fun startStopListener() {", "private fun startStopListener() { if (true) return;")
+          s = re.sub(r"try\s*\{\s*speechRecognizer\?\.cancel\(\);\s*speechRecognizer\?\.destroy\(\)\s*\}\s*catch\s*\(_:\s*Exception\)\s*\{\}\s*muteBeepBriefly\(\)\s*speechRecognizer\s*=\s*SpeechRecognizer\.createSpeechRecognizer\(this\)", "if (speechRecognizer == null) { speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this) }", s)
 
-          # Подключаем студийный нейро-голос (Onyx) вместо робо-TTS
+          # 3. Студийный голос с проверкой что пришёл реальный MP3, а не HTML <!DOCTYPE
           s = s.replace("https://google.com", "https://pollinations.ai\" + enc + \"?model=openai-audio&voice=onyx")
+          s = s.replace("setDataSource(urlStr)", "val bytes = URL(urlStr).readBytes(); if (bytes.size < 2000 || String(bytes.take(20).toByteArray()).contains(\"DOCTYPE\", true)) throw Exception(\"Not audio\"); val f = java.io.File(cacheDir, \"v_\" + System.currentTimeMillis() + \".mp3\"); f.writeBytes(bytes); setDataSource(f.absolutePath)")
           s = s.replace("if (ttsReady) { tts?.speak(chunks[i], mode, null, uttId) } else { if (i == 0) speakOnlineFallback(c); break }", "if (i == 0) speakOnlineFallback(c); break")
           s = s.replace("if (ttsReady) tts?.speak(reply, TextToSpeech.QUEUE_FLUSH, null, \"APEX_UTTERANCE\") else speakOnlineFallback(reply)", "speakOnlineFallback(reply)")
 
-          # Убираем постоянный destroy() микрофона при каждом цикле (убирает бульканье)
-          s = s.replace("try { speechRecognizer?.cancel(); speechRecognizer?.destroy() } catch (_: Exception) {}\n                muteBeepBriefly()\n                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)", "if (speechRecognizer == null) { speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this) }")
           open(sp, "w", encoding="utf-8").write(s)
           '
           tar -czf vault.tar.gz app build.gradle* settings.gradle* gradle*
