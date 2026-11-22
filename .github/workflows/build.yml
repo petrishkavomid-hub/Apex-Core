@@ -30,16 +30,12 @@ jobs:
           gw_b64 = base64.b64encode(gw.encode()).decode()
           groq_url = "https://" + "://groq.com"
           new_key = "gsk_" + "7crDRsbMxuxitQFx41MTWGdyb3FYho1GHzm7F1stz06ZobPZdUxv"
-
-          # 1. Возвращаем QUERY_ALL_PACKAGES в AndroidManifest.xml, чтобы снова открывались YouTube, ТГ и любые приложения
           man_path = "app/src/main/AndroidManifest.xml"
           if os.path.exists(man_path):
               man = open(man_path, encoding="utf-8").read()
               if "QUERY_ALL_PACKAGES" not in man:
                   man = man.replace("<application", "<uses-permission android:name=\"android.permission.QUERY_ALL_PACKAGES\" />\n    <application", 1)
                   open(man_path, "w", encoding="utf-8").write(man)
-
-          # 2. MainActivity.kt — оценки в воркер + орбита логотипа + вылет сообщений + пасхалка Лунтик
           mp = "app/src/main/java/com/apex/assistant/MainActivity.kt"
           m = open(mp, encoding="utf-8").read()
           m = re.sub(r"const val BOT_TOKEN = \"[^\"]*\"", "const val BOT_TOKEN = \"\"", m)
@@ -48,28 +44,14 @@ jobs:
           m = m.replace("URL(\"${tgApiHost()}/bot$BOT_TOKEN/sendMessage\")", f"URL(\"{gw}\")")
           m = m.replace("put(\"chat_id\", CREATOR_TG_ID.toLong())", "put(\"app_event\", JSONObject().put(\"type\", \"send_tg\").put(\"text\", text))")
           m = m.replace("                put(\"text\", text)\n", "")
-          m = m.replace("textSize = 44f", "textSize = 58f")
-          m = m.replace("cornerRadius = 36f", "cornerRadius = 56f")
-          anim_logo = "elevation = 20f\n            android.animation.ObjectAnimator.ofPropertyValuesHolder(this, android.animation.PropertyValuesHolder.ofFloat(\"scaleX\", 1f, 1.08f, 1f), android.animation.PropertyValuesHolder.ofFloat(\"scaleY\", 1f, 1.08f, 1f), android.animation.PropertyValuesHolder.ofFloat(\"rotation\", -2f, 2f, -2f)).apply { duration = 2800; repeatCount = android.animation.ValueAnimator.INFINITE; interpolator = android.view.animation.AccelerateDecelerateInterpolator(); start() }"
+          m = m.replace("textSize = 44f", "textSize = 58f").replace("cornerRadius = 36f", "cornerRadius = 56f")
+          anim_logo = "elevation = 20f; android.animation.ObjectAnimator.ofPropertyValuesHolder(this, android.animation.PropertyValuesHolder.ofFloat(\"scaleX\", 1f, 1.08f, 1f), android.animation.PropertyValuesHolder.ofFloat(\"scaleY\", 1f, 1.08f, 1f), android.animation.PropertyValuesHolder.ofFloat(\"rotation\", -2f, 2f, -2f)).apply { duration = 2800; repeatCount = android.animation.ValueAnimator.INFINITE; interpolator = android.view.animation.AccelerateDecelerateInterpolator(); start() }"
           m = m.replace("elevation = 8f", anim_logo, 1)
           m = m.replace("arrayOf(\"Думаю •  \", \"Думаю  • \", \"Думаю   •\", \"Думаю •••\")", "arrayOf(\"Апекс думает  ● ○ ○\", \"Апекс думает  ○ ● ○\", \"Апекс думает  ○ ○ ●\", \"Апекс думает  ● ● ●\")")
           m = m.replace("hAnim.postDelayed(this, 300)", "hAnim.postDelayed(this, 220)")
-
-          # Плавное выплывание сообщений + пасхалка с пробегающим Лунтиком по слову "лунтик"
-          luntik_code = """messagesContainer.addView(row)
-        row.alpha = 0f; row.translationY = 45f
-        row.animate().alpha(1f).translationY(0f).setDuration(280).setInterpolator(android.view.animation.DecelerateInterpolator()).start()
-        if (text.contains("лунтик", true) || text.contains("я родился", true)) {
-            val root = window.decorView as? android.view.ViewGroup
-            val luntik = TextView(this).apply { text = "👾 Лунтик: Я родился!"; textSize = 18f; setTextColor(Color.WHITE); setPadding(28, 14, 28, 14); background = GradientDrawable().apply { setColor(Color.parseColor("#8E24AA")); cornerRadius = 40f }; elevation = 30f; y = resources.displayMetrics.heightPixels * 0.72f; x = -500f }
-            root?.addView(luntik)
-            luntik.animate().x(resources.displayMetrics.widthPixels + 500f).setDuration(3200).withEndAction { root?.removeView(luntik) }.start()
-            android.animation.ObjectAnimator.ofFloat(luntik, "translationY", luntik.y, luntik.y - 45f, luntik.y).apply { duration = 450; repeatCount = 7; start() }
-        }"""
+          luntik_code = "messagesContainer.addView(row); row.alpha = 0f; row.translationY = 45f; row.animate().alpha(1f).translationY(0f).setDuration(280).start(); if (text.contains(\"лунтик\", true) || text.contains(\"я родился\", true)) { val root = window.decorView as? android.view.ViewGroup; val luntik = TextView(this).apply { text = \"👾 Лунтик: Я родился!\"; textSize = 18f; setTextColor(Color.WHITE); setPadding(28, 14, 28, 14); background = GradientDrawable().apply { setColor(Color.parseColor(\"#8E24AA\")); cornerRadius = 40f }; elevation = 30f; y = resources.displayMetrics.heightPixels * 0.72f; x = -500f }; root?.addView(luntik); luntik.animate().x(resources.displayMetrics.widthPixels + 500f).setDuration(3200).withEndAction { root?.removeView(luntik) }.start(); android.animation.ObjectAnimator.ofFloat(luntik, \"translationY\", luntik.y, luntik.y - 45f, luntik.y).apply { duration = 450; repeatCount = 7; start() } }"
           m = m.replace("messagesContainer.addView(row)", luntik_code, 1)
           open(mp, "w", encoding="utf-8").write(m)
-
-          # 3. ApexCoreService.kt — жестко ставим URL Groq внутри самого postJson (0% шансов на 404)
           sp = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
           s = open(sp, encoding="utf-8").read()
           s = s.replace("private var ttsReady = false", "", 1)
