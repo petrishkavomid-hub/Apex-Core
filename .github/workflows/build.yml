@@ -75,7 +75,7 @@ jobs:
           git add apex_vault.enc
           git commit -m "Update encrypted vault" || true
           git push || true
-
+          - run: nl -ba app/src/main/java/com/apex/assistant/ApexCoreService.kt | sed -n '220,285p'
       - uses: actions/setup-java@v4
         with:
           java-version: '17'
