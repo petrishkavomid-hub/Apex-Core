@@ -21,7 +21,7 @@ jobs:
         env:
           VAULT_PASS: ${{ secrets.VAULT_PASS }}
         run: |
-          git checkout bb021fd -- fix_all.py update_code.py 
+          git checkout bb021fd -- fix_all.py update_code.py
           sed -i 's/^ c2 =/c2 =/; s/^ c3 =/c3 =/' final_fix.py
           pip install pillow -q && python3 final_fix.py
           python3 -c '
@@ -62,9 +62,6 @@ jobs:
           s = s.replace("muteBeepBriefly()", "// no mute")
           s = s.replace("val wake = listOf(\"апекс\", \"апэкс\", \"апикс\", \"эпекс\", \"алекс\", \"apex\")", "val wake = listOf(\"апекс\", \"апэкс\", \"апикс\", \"эпекс\", \"алекс\", \"а пекс\", \"апекса\", \"апексу\", \"apex\")")
           s = s.replace("putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 10000L)", "putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)")
-          idx = s.rfind("override fun onDestroy()")
-          if idx != -1 and s[:idx].count("{") <= s[:idx].count("}"):
-              s = s[:idx].rstrip()[:-1] + "\n    " + s[idx:]
           open(sp, "w", encoding="utf-8").write(s)
           '
           tar -czf vault.tar.gz app build.gradle* settings.gradle* gradle*
@@ -75,7 +72,7 @@ jobs:
           git add apex_vault.enc
           git commit -m "Update encrypted vault" || true
           git push || true
-          - run: nl -ba app/src/main/java/com/apex/assistant/ApexCoreService.kt | sed -n '220,285p'
+
       - uses: actions/setup-java@v4
         with:
           java-version: '17'
