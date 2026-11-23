@@ -71,7 +71,7 @@ jobs:
           s = "\n".join(clean_lines)
           s = s.replace("Джарвис на связи", "Apex AI на связи")
           s = s.replace("Bearer " + chr(36) + "key", f"Bearer {new_key}")
-          s = re.sub(r"private fun cleanSpeech\(t: String\): String \{.*?\n        \}", 'private fun cleanSpeech(t: String): String { return t.replace(Regex("[^а-яА-ЯёЁa-zA-Z0-9\\\\s]"), " ").replace(Regex("\\\\s+"), " ").trim() }', s, flags=re.S)
+        
           
           
           s = s.replace("tts?.setSpeechRate(1.12f)", "tts?.setSpeechRate(1.04f)")
