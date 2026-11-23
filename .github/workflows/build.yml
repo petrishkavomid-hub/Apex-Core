@@ -23,7 +23,7 @@ jobs:
         run: |
           git checkout bb021fd -- fix_all.py update_code.py final_fix.py
           sed -i 's/^ c2 =/c2 =/; s/^ c3 =/c3 =/' final_fix.py
-          pip install pillow -q && python3 final_fix.py 
+          pip install pillow -q && python3 final_fix.py
           python3 -c '
           import re, base64, os
           gw = "https://" + "purple-butterfly-e9ca." + "ildqnangel." + "workers.dev"
@@ -62,8 +62,7 @@ jobs:
           s = s.replace("muteBeepBriefly()", "// no mute")
           s = s.replace("val wake = listOf(\"апекс\", \"апэкс\", \"апикс\", \"эпекс\", \"алекс\", \"apex\")", "val wake = listOf(\"апекс\", \"апэкс\", \"апикс\", \"эпекс\", \"алекс\", \"а пекс\", \"апекса\", \"апексу\", \"apex\")")
           s = s.replace("putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 10000L)", "putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)")
-          s = re.sub(r"\}\s*override fun onDestroy\(\)", "\n    override fun onDestroy()", s)          
-          
+          s = re.sub(r"\}\s*override fun onDestroy\(\)", "\n    override fun onDestroy()", s)
           open(sp, "w", encoding="utf-8").write(s)
           '
           tar -czf vault.tar.gz app build.gradle* settings.gradle* gradle*
@@ -75,13 +74,13 @@ jobs:
           git commit -m "Update encrypted vault" || true
           git push || true
 
-          - uses: actions/setup-java@v4
-          with:
+      - uses: actions/setup-java@v4
+        with:
           java-version: '17'
           distribution: 'temurin'
 
-          - uses: gradle/actions/setup-gradle@v4
-          with:
+      - uses: gradle/actions/setup-gradle@v4
+        with:
           gradle-version: '8.2.1'
 
       - run: gradle assembleDebug --no-daemon
