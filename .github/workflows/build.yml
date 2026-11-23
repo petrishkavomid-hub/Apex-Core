@@ -72,7 +72,7 @@ jobs:
           s = s.replace("val wake = listOf(\"апекс\", \"апэкс\", \"апикс\", \"эпекс\", \"алекс\", \"apex\")", "val wake = listOf(\"апекс\", \"апэкс\", \"апикс\", \"эпекс\", \"алекс\", \"а пекс\", \"апекса\", \"апексу\", \"apex\")")
           open(sp, "w", encoding="utf-8").write(s)
           EOF
-          python3 patch_v6.py && rm -f patch_v6.py
+          python3 patch_v6.py && rm -f patch_v6.py && sed -i '23d' app/src/main/java/com/apex/assistant/ApexCoreService.kt           
           tar -czf vault.tar.gz app build.gradle* settings.gradle* gradle*
           openssl enc -aes-256-cbc -pbkdf2 -salt -in vault.tar.gz -out apex_vault.enc -pass env:VAULT_PASS
           rm -f vault.tar.gz
