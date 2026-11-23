@@ -373,7 +373,7 @@ class ApexCoreService : Service(), TextToSpeech.OnInitListener {{
             }} catch (_: Exception) {{}}
             return null
         }}
-    }}
+    
         private fun applyJarvisVoice() {{
         try {{
             tts?.setLanguage(Locale("ru", "RU"))
