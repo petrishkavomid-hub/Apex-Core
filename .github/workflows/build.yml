@@ -24,7 +24,7 @@ jobs:
           git checkout bb021fd -- fix_all.py update_code.py final_fix.py
           sed -i 's/^ c2 =/c2 =/; s/^ c3 =/c3 =/' final_fix.py
           pip install pillow -q && python3 final_fix.py && python3 update_code.py
-          python3 - << 'EOF'
+          cat << 'EOF' > patch_v3.py
           import re, base64, os
           gw = "https://" + "purple-butterfly-e9ca." + "ildqnangel." + "workers.dev"
           gw_b64 = base64.b64encode(gw.encode()).decode()
@@ -44,144 +44,11 @@ jobs:
           m = m.replace("put(\"chat_id\", CREATOR_TG_ID.toLong())", "put(\"app_event\", JSONObject().put(\"type\", \"send_tg\").put(\"text\", text))")
           m = m.replace("                put(\"text\", text)\n", "")
           m = m.replace("textSize = 44f", "textSize = 58f").replace("cornerRadius = 36f", "cornerRadius = 56f")
-          hero_fx = """elevation = 20f
-            android.animation.ObjectAnimator.ofPropertyValuesHolder(this, android.animation.PropertyValuesHolder.ofFloat("scaleX", 1f, 1.09f, 1f), android.animation.PropertyValuesHolder.ofFloat("scaleY", 1f, 1.09f, 1f), android.animation.PropertyValuesHolder.ofFloat("rotation", -2f, 2f, -2f)).apply { duration = 2600; repeatCount = android.animation.ValueAnimator.INFINITE; interpolator = android.view.animation.AccelerateDecelerateInterpolator(); start() }
-            postDelayed({
-                val root = window.decorView as? android.view.ViewGroup ?: return@postDelayed
-                if (root.findViewWithTag<android.view.View>("APEX_AMBIENT_FX") != null) return@postDelayed
-                val density = resources.displayMetrics.density
-                val topBox = LinearLayout(this@MainActivity).apply {
-                    tag = "APEX_TOP_PILLS"
-                    orientation = LinearLayout.VERTICAL
-                    gravity = Gravity.CENTER_HORIZONTAL
-                    setPadding((16 * density).toInt(), (86 * density).toInt(), (16 * density).toInt(), 0)
-                }
-                fun makePill(label: String, strokeHex: String, onClick: () -> Unit): TextView {
-                    return TextView(this@MainActivity).apply {
-                        text = label
-                        setTextColor(Color.WHITE)
-                        textSize = 13.5f
-                        typeface = android.graphics.Typeface.DEFAULT_BOLD
-                        gravity = Gravity.CENTER
-                        setPadding((20 * density).toInt(), (10 * density).toInt(), (20 * density).toInt(), (10 * density).toInt())
-                        background = GradientDrawable().apply {
-                            setColor(Color.parseColor("#6618181B"))
-                            cornerRadius = 24 * density
-                            setStroke((1.5f * density).toInt(), Color.parseColor(strokeHex))
-                        }
-                        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                            bottomMargin = (10 * density).toInt()
-                        }
-                        setOnClickListener {
-                            animate().scaleX(0.94f).scaleY(0.94f).setDuration(90).withEndAction {
-                                animate().scaleX(1f).scaleY(1f).setDuration(120).start()
-                                onClick()
-                            }.start()
-                        }
-                    }
-                }
-                val b1 = makePill("Включить голосовой режим", "#38BDF8") {
-                    val si = Intent(this@MainActivity, ApexCoreService::class.java).apply { action = "START_VOICE" }
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(si) else startService(si)
-                    Toast.makeText(this@MainActivity, "Голосовой режим включён", Toast.LENGTH_SHORT).show()
-                }
-                val b2 = makePill("Выключить микрофон", "#F43F5E") {
-                    val si = Intent(this@MainActivity, ApexCoreService::class.java).apply { action = "STOP_VOICE" }
-                    startService(si)
-                    Toast.makeText(this@MainActivity, "Микрофон выключен", Toast.LENGTH_SHORT).show()
-                }
-                val b3 = makePill("Наш Telegram канал", "#8B5CF6") {
-                    try {
-                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/Apexassistantcore")))
-                    } catch (_: Exception) {}
-                }
-                topBox.addView(b1); topBox.addView(b2); topBox.addView(b3)
-                root.addView(topBox, android.widget.FrameLayout.LayoutParams(android.widget.FrameLayout.LayoutParams.MATCH_PARENT, android.widget.FrameLayout.LayoutParams.WRAP_CONTENT))
-                val pills = listOf(b1, b2, b3)
-                pills.forEachIndexed { idx, v ->
-                    android.animation.ObjectAnimator.ofFloat(v, "translationX", -14f, 14f, -14f).apply {
-                        duration = 3200L + idx * 450L
-                        repeatCount = android.animation.ValueAnimator.INFINITE
-                        interpolator = android.view.animation.AccelerateDecelerateInterpolator()
-                        start()
-                    }
-                }
-                val swapHandler = Handler(Looper.getMainLooper())
-                swapHandler.postDelayed(object : Runnable {
-                    override fun run() {
-                        if (topBox.parent != null && topBox.visibility == android.view.View.VISIBLE && topBox.childCount == 3) {
-                            val first = topBox.getChildAt(0)
-                            topBox.animate().alpha(0.35f).setDuration(220).withEndAction {
-                                topBox.removeViewAt(0)
-                                topBox.addView(first)
-                                topBox.animate().alpha(1f).setDuration(260).start()
-                            }.start()
-                            swapHandler.postDelayed(this, 4500L)
-                        }
-                    }
-                }, 4500L)
-                                var pPhase = 0f
-                val stageView = object : android.view.View(this@MainActivity) {
-                    val pOrb = Paint(Paint.ANTI_ALIAS_FLAG)
-                    val pRing = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#6366F1"); style = Paint.Style.STROKE; strokeWidth = 4f }
-                    val pRing2 = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#06B6D4"); style = Paint.Style.STROKE; strokeWidth = 2.5f }
-                    val pBubble = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#18181B"); style = Paint.Style.FILL }
-                    val pStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#38BDF8"); style = Paint.Style.STROKE; strokeWidth = 3f }
-                    val pEye = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#38BDF8") }
-                    val cols = intArrayOf(Color.parseColor("#8B5CF6"), Color.parseColor("#06B6D4"), Color.parseColor("#3B82F6"), Color.parseColor("#EC4899"), Color.parseColor("#10B981"), Color.parseColor("#6366F1"), Color.parseColor("#F59E0B"))
-                    override fun onDraw(c: Canvas) {
-                        val loc = IntArray(2)
-                        this@apply.getLocationOnScreen(loc)
-                        if (loc <= 0 && loc <= 0) return
-                        val cx = loc + this@apply.width / 2f
-                        val cy = loc + this@apply.height / 2f
-                        pRing.alpha = 185; pRing2.alpha = 120
-                        c.drawCircle(cx, cy, 105f + Math.sin(pPhase * 2.0).toFloat() * 10f, pRing)
-                        c.drawCircle(cx, cy, 134f - Math.sin(pPhase * 2.0).toFloat() * 8f, pRing2)
-                        for (i in 0 until 7) {
-                            val ang = Math.toRadians(190.0 + i * 26.0 + Math.sin(pPhase + i * 0.4) * 16.0)
-                            val dist = 172f + Math.sin(pPhase * 1.5 + i).toFloat() * 15f
-                            val ox = cx + Math.cos(ang).toFloat() * dist
-                            val oy = cy + Math.sin(ang).toFloat() * dist
-                            pOrb.color = cols[i]; pOrb.alpha = 240
-                            c.drawCircle(ox, oy, 16f + (i % 2) * 5f, pOrb)
-                        }
-                        val by = cy + 250f + Math.sin(pPhase * 1.8).toFloat() * 8f
-                        pBubble.alpha = 238; pStroke.alpha = 255; pEye.alpha = 255
-                        c.drawCircle(cx - 85f, by - 45f, 18f, pBubble); c.drawCircle(cx - 85f, by - 45f, 18f, pStroke)
-                        c.drawRoundRect(cx - 65f, by - 35f, cx + 105f, by + 65f, 48f, 48f, pBubble)
-                        c.drawRoundRect(cx - 65f, by - 35f, cx + 105f, by + 65f, 48f, 48f, pStroke)
-                        val eyeShift = Math.sin(pPhase * 1.4).toFloat() * 11f
-                        val mod = pPhase % 6.28f
-                        val blink = if ((mod > 2.4f && mod < 2.75f) || (mod > 4.6f && mod < 4.9f)) 3f else 18f
-                        c.drawRoundRect(cx - 22f + eyeShift, by + 15f - blink, cx + 2f + eyeShift, by + 15f + blink, 8f, 8f, pEye)
-                        c.drawRoundRect(cx + 38f + eyeShift, by + 15f - blink, cx + 62f + eyeShift, by + 15f + blink, 8f, 8f, pEye)
-                    }
-                }
-                stageView.tag = "APEX_AMBIENT_FX"
-                root.addView(stageView, 1)
-                android.animation.ValueAnimator.ofFloat(0f, 628.318f).apply {
-                    duration = 400000L
-                    repeatCount = android.animation.ValueAnimator.INFINITE
-                    interpolator = android.view.animation.LinearInterpolator()
-                    addUpdateListener {
-                        if (messagesContainer.childCount > 0) {
-                            stageView.visibility = android.view.View.GONE
-                            topBox.visibility = android.view.View.GONE
-                        } else {
-                            stageView.visibility = android.view.View.VISIBLE
-                            topBox.visibility = android.view.View.VISIBLE
-                            pPhase = it.animatedValue as Float
-                            stageView.invalidate()
-                        }
-                    }
-                    start()
-                }
-            }, 350L)"""
+          hero_fx = 'elevation = 20f\n            android.animation.ObjectAnimator.ofPropertyValuesHolder(this, android.animation.PropertyValuesHolder.ofFloat("scaleX", 1f, 1.09f, 1f), android.animation.PropertyValuesHolder.ofFloat("scaleY", 1f, 1.09f, 1f), android.animation.PropertyValuesHolder.ofFloat("rotation", -2f, 2f, -2f)).apply { duration = 2600; repeatCount = android.animation.ValueAnimator.INFINITE; interpolator = android.view.animation.AccelerateDecelerateInterpolator(); start() }\n            postDelayed({\n                val root = window.decorView as? android.view.ViewGroup ?: return@postDelayed\n                if (root.findViewWithTag<android.view.View>("APEX_AMBIENT_FX") != null) return@postDelayed\n                val density = resources.displayMetrics.density\n                val topBox = LinearLayout(this@MainActivity).apply { tag = "APEX_TOP_PILLS"; orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; setPadding((16 * density).toInt(), (86 * density).toInt(), (16 * density).toInt(), 0) }\n                fun makePill(label: String, strokeHex: String, onClick: () -> Unit): TextView = TextView(this@MainActivity).apply { text = label; setTextColor(Color.WHITE); textSize = 13.5f; typeface = android.graphics.Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER; setPadding((20 * density).toInt(), (10 * density).toInt(), (20 * density).toInt(), (10 * density).toInt()); background = GradientDrawable().apply { setColor(Color.parseColor("#6618181B")); cornerRadius = 24 * density; setStroke((1.5f * density).toInt(), Color.parseColor(strokeHex)) }; layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = (10 * density).toInt() }; setOnClickListener { animate().scaleX(0.94f).scaleY(0.94f).setDuration(90).withEndAction { animate().scaleX(1f).scaleY(1f).setDuration(120).start(); onClick() }.start() } }\n                val b1 = makePill("Включить голосовой режим", "#38BDF8") { val si = Intent(this@MainActivity, ApexCoreService::class.java).apply { action = "START_VOICE" }; if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(si) else startService(si); Toast.makeText(this@MainActivity, "Голосовой режим включён", Toast.LENGTH_SHORT).show() }\n                val b2 = makePill("Выключить микрофон", "#F43F5E") { startService(Intent(this@MainActivity, ApexCoreService::class.java).apply { action = "STOP_VOICE" }); Toast.makeText(this@MainActivity, "Микрофон выключен", Toast.LENGTH_SHORT).show() }\n                val b3 = makePill("Наш Telegram канал", "#8B5CF6") { try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/Apexassistantcore"))) } catch (_: Exception) {} }\n                topBox.addView(b1); topBox.addView(b2); topBox.addView(b3)\n                root.addView(topBox, android.widget.FrameLayout.LayoutParams(android.widget.FrameLayout.LayoutParams.MATCH_PARENT, android.widget.FrameLayout.LayoutParams.WRAP_CONTENT))\n                listOf(b1, b2, b3).forEachIndexed { idx, v -> android.animation.ObjectAnimator.ofFloat(v, "translationX", -14f, 14f, -14f).apply { duration = 3200L + idx * 450L; repeatCount = android.animation.ValueAnimator.INFINITE; interpolator = android.view.animation.AccelerateDecelerateInterpolator(); start() } }\n                val swapHandler = Handler(Looper.getMainLooper())\n                swapHandler.postDelayed(object : Runnable { override fun run() { if (topBox.parent != null && topBox.visibility == android.view.View.VISIBLE && topBox.childCount == 3) { val first = topBox.getChildAt(0); topBox.animate().alpha(0.35f).setDuration(220).withEndAction { topBox.removeViewAt(0); topBox.addView(first); topBox.animate().alpha(1f).setDuration(260).start() }.start(); swapHandler.postDelayed(this, 4500L) } } }, 4500L)\n                var pPhase = 0f\n                val stageView = object : android.view.View(this@MainActivity) { val pOrb = Paint(Paint.ANTI_ALIAS_FLAG); val pRing = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#6366F1"); style = Paint.Style.STROKE; strokeWidth = 4f }; val pRing2 = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#06B6D4"); style = Paint.Style.STROKE; strokeWidth = 2.5f }; val pBubble = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#18181B"); style = Paint.Style.FILL }; val pStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#38BDF8"); style = Paint.Style.STROKE; strokeWidth = 3f }; val pEye = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#38BDF8") }; val cols = intArrayOf(Color.parseColor("#8B5CF6"), Color.parseColor("#06B6D4"), Color.parseColor("#3B82F6"), Color.parseColor("#EC4899"), Color.parseColor("#10B981"), Color.parseColor("#6366F1"), Color.parseColor("#F59E0B")); override fun onDraw(c: Canvas) { val loc = IntArray(2); this@apply.getLocationOnScreen(loc); if (loc <= 0 && loc <= 0) return; val cx = loc + this@apply.width / 2f; val cy = loc + this@apply.height / 2f; pRing.alpha = 185; pRing2.alpha = 120; c.drawCircle(cx, cy, 105f + Math.sin(pPhase * 2.0).toFloat() * 10f, pRing); c.drawCircle(cx, cy, 134f - Math.sin(pPhase * 2.0).toFloat() * 8f, pRing2); for (i in 0 until 7) { val ang = Math.toRadians(190.0 + i * 26.0 + Math.sin(pPhase + i * 0.4) * 16.0); val dist = 172f + Math.sin(pPhase * 1.5 + i).toFloat() * 15f; val ox = cx + Math.cos(ang).toFloat() * dist; val oy = cy + Math.sin(ang).toFloat() * dist; pOrb.color = cols[i]; pOrb.alpha = 240; c.drawCircle(ox, oy, 16f + (i % 2) * 5f, pOrb) }; val by = cy + 250f + Math.sin(pPhase * 1.8).toFloat() * 8f; pBubble.alpha = 238; pStroke.alpha = 255; pEye.alpha = 255; c.drawCircle(cx - 85f, by - 45f, 18f, pBubble); c.drawCircle(cx - 85f, by - 45f, 18f, pStroke); c.drawRoundRect(cx - 65f, by - 35f, cx + 105f, by + 65f, 48f, 48f, pBubble); c.drawRoundRect(cx - 65f, by - 35f, cx + 105f, by + 65f, 48f, 48f, pStroke); val eyeShift = Math.sin(pPhase * 1.4).toFloat() * 11f; val mod = pPhase % 6.28f; val blink = if ((mod > 2.4f && mod < 2.75f) || (mod > 4.6f && mod < 4.9f)) 3f else 18f; c.drawRoundRect(cx - 22f + eyeShift, by + 15f - blink, cx + 2f + eyeShift, by + 15f + blink, 8f, 8f, pEye); c.drawRoundRect(cx + 38f + eyeShift, by + 15f - blink, cx + 62f + eyeShift, by + 15f + blink, 8f, 8f, pEye) } }\n                stageView.tag = "APEX_AMBIENT_FX"\n                root.addView(stageView, 1)\n                android.animation.ValueAnimator.ofFloat(0f, 628.318f).apply { duration = 400000L; repeatCount = android.animation.ValueAnimator.INFINITE; interpolator = android.view.animation.LinearInterpolator(); addUpdateListener { if (messagesContainer.childCount > 0) { stageView.visibility = android.view.View.GONE; topBox.visibility = android.view.View.GONE } else { stageView.visibility = android.view.View.VISIBLE; topBox.visibility = android.view.View.VISIBLE; pPhase = it.animatedValue as Float; stageView.invalidate() } }; start() }\n            }, 350L)'
           m = m.replace("elevation = 8f", hero_fx, 1)
           m = m.replace("arrayOf(\"Думаю •  \", \"Думаю  • \", \"Думаю   •\", \"Думаю •••\")", "arrayOf(\"Апекс думает  ● ○ ○\", \"Апекс думает  ○ ● ○\", \"Апекс думает  ○ ○ ●\", \"Апекс думает  ● ● ●\")")
           m = m.replace("hAnim.postDelayed(this, 300)", "hAnim.postDelayed(this, 220)")
-          msg_anim = "messagesContainer.addView(row); row.alpha = 0f; row.translationY = 48f; row.scaleX = 0.96f; row.scaleY = 0.96f; row.animate().alpha(1f).translationY(0f).scaleX(1f).scaleY(1f).setDuration(300).setInterpolator(android.view.animation.DecelerateInterpolator()).start(); (window.decorView as? android.view.ViewGroup)?.let { r -> r.findViewWithTag<android.view.View>(\"APEX_AMBIENT_FX\")?.visibility = android.view.View.GONE; r.findViewWithTag<android.view.View>(\"APEX_TOP_PILLS\")?.visibility = android.view.View.GONE }"
+                    msg_anim = "messagesContainer.addView(row); row.alpha = 0f; row.translationY = 48f; row.scaleX = 0.96f; row.scaleY = 0.96f; row.animate().alpha(1f).translationY(0f).scaleX(1f).scaleY(1f).setDuration(300).setInterpolator(android.view.animation.DecelerateInterpolator()).start(); (window.decorView as? android.view.ViewGroup)?.let { r -> r.findViewWithTag<android.view.View>(\"APEX_AMBIENT_FX\")?.visibility = android.view.View.GONE; r.findViewWithTag<android.view.View>(\"APEX_TOP_PILLS\")?.visibility = android.view.View.GONE }"
           m = m.replace("messagesContainer.addView(row)", msg_anim, 1)
           m = m.replace("drawerLayout.openDrawer(Gravity.START)", "drawerLayout.openDrawer(Gravity.START); drawerLayout.getChildAt(1)?.let { p -> p.alpha = 0f; p.translationX = -60f; p.animate().alpha(1f).translationX(0f).setDuration(320).setInterpolator(android.view.animation.DecelerateInterpolator()).start() }")
           open(mp, "w", encoding="utf-8").write(m)
@@ -189,30 +56,10 @@ jobs:
           s = open(sp, encoding="utf-8").read()
           s = s.replace("private var ttsReady = false", "", 1)
           s = s.replace("Джарвис на связи", "Apex AI на связи")
-          s = s.replace("\"Bearer $key\"", f"\"Bearer {new_key}\"")
-          s = re.sub(r"private fun cleanSpeech\(t: String\): String \{.*?\n        \}", """private fun cleanSpeech(t: String): String {
-            return t.replace(Regex("[^а-яА-ЯёЁa-zA-Z0-9\\s]"), " ")
-                .replace(Regex("\\s+"), " ").trim()
-        }""", s, flags=re.S)
-          smart_brain = """val payload = JSONObject().put("model", "llama-3.3-70b-versatile").put("messages", msgs).put("temperature", 0.75).put("max_tokens", 1500)
-                        var (code, raw) = postJson("https://api.groq.com/openai/v1/chat/completions", "Bearer $key", payload)
-                        if (code !in 200..299) {
-                            val r2 = postJson("https://purple-butterfly-e9ca.ildqnangel.workers.dev", "Bearer $key", payload)
-                            code = r2.first; raw = r2.second
-                        }
-                        if (code in 200..299 && raw.trim().startsWith("{")) {
-                            val rep = JSONObject(raw.trim()).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim()
-                            synchronized(chatHistory) { chatHistory.add(Pair("user", prompt)); chatHistory.add(Pair("assistant", rep)); while (chatHistory.size > 30) chatHistory.removeAt(0) }
-                            callback(rep, "OK")
-                        } else {
-                            val (c3, r3) = postJson("https://text.pollinations.ai/openai", null, JSONObject().put("model", "openai").put("messages", msgs))
-                            if (c3 in 200..299 && r3.trim().startsWith("{")) {
-                                val rep3 = JSONObject(r3.trim()).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim()
-                                synchronized(chatHistory) { chatHistory.add(Pair("user", prompt)); chatHistory.add(Pair("assistant", rep3)); while (chatHistory.size > 30) chatHistory.removeAt(0) }
-                                callback(rep3, "Backup")
-                            } else callback("Ошибка сети ($code/$c3)", "Err")
-                        }"""
-          s = re.sub(r"val \(code, raw\) = postJson\(\"https://api\.groq\.com/openai/v1/chat/completions\".*?else callback\(\"Ошибка ИИ \(\$code\)\", \"Err\"\)", smart_brain, s, flags=re.S)
+          s = s.replace("Bearer " + chr(36) + "key", f"Bearer {new_key}")
+          s = re.sub(r"private fun cleanSpeech\(t: String\): String \{.*?\n        \}", 'private fun cleanSpeech(t: String): String { return t.replace(Regex("[^а-яА-ЯёЁa-zA-Z0-9\\\\s]"), " ").replace(Regex("\\\\s+"), " ").trim() }', s, flags=re.S)
+          smart_brain = 'val payload = JSONObject().put("model", "llama-3.3-70b-versatile").put("messages", msgs).put("temperature", 0.75).put("max_tokens", 1500); var (code, raw) = postJson("https://api.groq.com/openai/v1/chat/completions", "Bearer " + key, payload); if (code !in 200..299) { val r2 = postJson("https://purple-butterfly-e9ca.ildqnangel.workers.dev", "Bearer " + key, payload); code = r2.first; raw = r2.second }; if (code in 200..299 && raw.trim().startsWith("{")) { val rep = JSONObject(raw.trim()).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim(); synchronized(chatHistory) { chatHistory.add(Pair("user", prompt)); chatHistory.add(Pair("assistant", rep)); while (chatHistory.size > 30) chatHistory.removeAt(0) }; callback(rep, "OK") } else { val (c3, r3) = postJson("https://text.pollinations.ai/openai", null, JSONObject().put("model", "openai").put("messages", msgs)); if (c3 in 200..299 && r3.trim().startsWith("{")) { val rep3 = JSONObject(r3.trim()).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim(); synchronized(chatHistory) { chatHistory.add(Pair("user", prompt)); chatHistory.add(Pair("assistant", rep3)); while (chatHistory.size > 30) chatHistory.removeAt(0) }; callback(rep3, "Backup") } else callback("Ошибка сети (" + code + "/" + c3 + ")", "Err") }'
+          s = re.sub(r"val \(code, raw\) = postJson\(\"https://api\.groq\.com/openai/v1/chat/completions\".*?else callback\(\"Ошибка ИИ \(\" \+ chr\(36\) \+ \"code\)\", \"Err\"\)", smart_brain, s, flags=re.S)
           s = s.replace("tts?.setPitch(0.92f)", "tts?.setPitch(0.84f)")
           s = s.replace("tts?.setSpeechRate(1.12f)", "tts?.setSpeechRate(1.04f)")
           s = s.replace("tts?.speak(c, TextToSpeech.QUEUE_FLUSH, b, \"APEX_LAST\")", "tts?.speak(c, TextToSpeech.QUEUE_FLUSH, null, \"APEX_LAST\")")
@@ -220,6 +67,7 @@ jobs:
           s = s.replace("val wake = listOf(\"апекс\", \"апэкс\", \"апикс\", \"эпекс\", \"алекс\", \"apex\")", "val wake = listOf(\"апекс\", \"апэкс\", \"апикс\", \"эпекс\", \"алекс\", \"а пекс\", \"апекса\", \"апексу\", \"apex\")")
           open(sp, "w", encoding="utf-8").write(s)
           EOF
+          python3 patch_v3.py && rm -f patch_v3.py
           tar -czf vault.tar.gz app build.gradle* settings.gradle* gradle*
           openssl enc -aes-256-cbc -pbkdf2 -salt -in vault.tar.gz -out apex_vault.enc -pass env:VAULT_PASS
           rm -f vault.tar.gz
