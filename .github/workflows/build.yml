@@ -63,7 +63,7 @@ jobs:
           s = s.replace("val wake = listOf(\"апекс\", \"апэкс\", \"апикс\", \"эпекс\", \"алекс\", \"apex\")", "val wake = listOf(\"апекс\", \"апэкс\", \"апикс\", \"эпекс\", \"алекс\", \"а пекс\", \"апекса\", \"апексу\", \"apex\")")
           s = s.replace("putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 10000L)", "putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)")
           s = s.replace("override fun onBind(intent: Intent?) = null", "override fun onBind(intent: Intent?): IBinder? = null")
-          s = re.sub(r"\n\}\s*\n(\s*private fun applyJarvisVoice)", r"\n\1", s)
+          s = s.replace("\n    }\n\n    private fun applyJarvisVoice()", "\n\n    private fun applyJarvisVoice()")
           open(sp, "w", encoding="utf-8").write(s)
           '
           tar -czf vault.tar.gz app build.gradle* settings.gradle* gradle*
