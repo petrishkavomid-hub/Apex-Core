@@ -62,7 +62,9 @@ jobs:
           s = s.replace("muteBeepBriefly()", "// no mute")
           s = s.replace("val wake = listOf(\"апекс\", \"апэкс\", \"апикс\", \"эпекс\", \"алекс\", \"apex\")", "val wake = listOf(\"апекс\", \"апэкс\", \"апикс\", \"эпекс\", \"алекс\", \"а пекс\", \"апекса\", \"апексу\", \"apex\")")
           s = s.replace("putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 10000L)", "putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)")
-          s = re.sub(r"\}\s*override fun onDestroy\(\)", "\n    override fun onDestroy()", s)
+          idx = s.rfind("override fun onDestroy()")
+          if idx != -1 and s[:idx].count("{") <= s[:idx].count("}"):
+              s = s[:idx].rstrip()[:-1] + "\n    " + s[idx:]
           open(sp, "w", encoding="utf-8").write(s)
           '
           tar -czf vault.tar.gz app build.gradle* settings.gradle* gradle*
