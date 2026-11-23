@@ -72,9 +72,8 @@ jobs:
           s = s.replace("Джарвис на связи", "Apex AI на связи")
           s = s.replace("Bearer " + chr(36) + "key", f"Bearer {new_key}")
           s = re.sub(r"private fun cleanSpeech\(t: String\): String \{.*?\n        \}", 'private fun cleanSpeech(t: String): String { return t.replace(Regex("[^а-яА-ЯёЁa-zA-Z0-9\\\\s]"), " ").replace(Regex("\\\\s+"), " ").trim() }', s, flags=re.S)
-          smart_brain = 'val payload = JSONObject().put("model", "llama-3.3-70b-versatile").put("messages", msgs).put("temperature", 0.75).put("max_tokens", 1500); var (code, raw) = postJson("https://api.groq.com/openai/v1/chat/completions", "Bearer " + key, payload); if (code !in 200..299) { val r2 = postJson("https://purple-butterfly-e9ca.ildqnangel.workers.dev", "Bearer " + key, payload); code = r2.first; raw = r2.second }; if (code in 200..299 && raw.trim().startsWith("{")) { val rep = JSONObject(raw.trim()).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim(); synchronized(chatHistory) { chatHistory.add(Pair("user", prompt)); chatHistory.add(Pair("assistant", rep)); while (chatHistory.size > 30) chatHistory.removeAt(0) }; callback(rep, "OK") } else { val (c3, r3) = postJson("https://text.pollinations.ai/openai", null, JSONObject().put("model", "openai").put("messages", msgs)); if (c3 in 200..299 && r3.trim().startsWith("{")) { val rep3 = JSONObject(r3.trim()).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim(); synchronized(chatHistory) { chatHistory.add(Pair("user", prompt)); chatHistory.add(Pair("assistant", rep3)); while (chatHistory.size > 30) chatHistory.removeAt(0) }; callback(rep3, "Backup") } else callback("Ошибка сети (" + code + "/" + c3 + ")", "Err") }'
-          s = re.sub(r"val \(code, raw\) = postJson\(\"https://api\.groq\.com/openai/v1/chat/completions\".*?else callback\(\"Ошибка ИИ \(\" \+ chr\(36\) \+ \"code\)\", \"Err\"\)", smart_brain, s, flags=re.S)
-          s = s.replace("tts?.setPitch(0.92f)", "tts?.setPitch(0.84f)")
+          
+          
           s = s.replace("tts?.setSpeechRate(1.12f)", "tts?.setSpeechRate(1.04f)")
           s = s.replace("tts?.speak(c, TextToSpeech.QUEUE_FLUSH, b, \"APEX_LAST\")", "tts?.speak(c, TextToSpeech.QUEUE_FLUSH, null, \"APEX_LAST\")")
           s = s.replace("muteBeepBriefly()", "// clean audio")
