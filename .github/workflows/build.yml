@@ -66,7 +66,7 @@ jobs:
           open(mp, "w", encoding="utf-8").write(m)
           sp = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
           s = open(sp, encoding="utf-8").read()
-          s = s.replace("private var ttsReady = false", "").replace("private var tts: TextToSpeech? = null", "private var tts: TextToSpeech? = null\n    private var ttsReady = false", 1)         
+          s = s.replace("private var ttsReady = false", "", 1)      
           s = s.replace("muteBeepBriefly()", "")
           s = s.replace("Джарвис на связи", "Apex AI на связи")
           s = s.replace("Bearer " + chr(36) + "key", f"Bearer {new_key}")
