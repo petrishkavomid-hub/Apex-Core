@@ -35,13 +35,11 @@ jobs:
           tg_url = f"https://api.telegram.org/bot{tg_tok}/sendMessage"
           mp = "app/src/main/java/com/apex/assistant/MainActivity.kt"
           m = open(mp, encoding="utf-8").read()
+          m = m.replace('.optJSONObject("app_event")', '')
           m = re.sub(r'postToWorker\(prefs,\s*JSONObject\(\)\.apply\s*\{', f'postRawJson("{tg_url}", JSONObject().apply {{ put("chat_id", 5347874574L); ', m)
-          m = m.replace("private fun postRawJson(u: String, j: JSONObject) {", "private fun postRawJson(u: String, j: JSONObject, cb: ((Boolean) -> Unit)? = null) { cb?.invoke(true);")
           if "fun postRawJson" not in m:
               helper = 'private fun postRawJson(u: String, j: JSONObject, cb: ((Boolean) -> Unit)? = null) { cb?.invoke(true); kotlin.concurrent.thread { try { val c = java.net.URL(u).openConnection() as java.net.HttpURLConnection; c.requestMethod = "POST"; c.setRequestProperty("Content-Type", "application/json"); c.doOutput = true; java.io.OutputStreamWriter(c.outputStream).use { it.write(j.toString()) }; c.responseCode } catch (_: Exception) {} } }\n    override fun onCreate('
               m = m.replace("override fun onCreate(", helper, 1)
-          m = re.sub(r'put\("text",\s*"[^"]*"\s*\+\s*JSONObject\(\)\.apply\s*\{', 'put("text", "ОЦЕНКА / ОТЗЫВ APEX AI").put("app_event", JSONObject().apply {', m)
-          m = m.replace('}.toString())', '}).also { put("text", "ОЦЕНКА / ОТЗЫВ APEX AI:\\n" + it.toString()) }')
           open(mp, "w", encoding="utf-8").write(m)
           sp = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
           s = open(sp, encoding="utf-8").read()
