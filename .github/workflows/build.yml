@@ -21,8 +21,8 @@ jobs:
         env:
           VAULT_PASS: ${{ secrets.VAULT_PASS }}
         run: |
-         git checkout bb021fd -- fix_all.py update_code.py final_fix.py && git checkout $(git log -n 1 --pretty=format:%H --grep="Update encrypted vault"~3 || git rev-list --max-parents=0 HEAD) -- apex_vault.enc || true
-                    
+          git checkout bb021fd -- fix_all.py update_code.py final_fix.py
+          git checkout $(git log --reverse --format=%H -- apex_vault.enc | head -n 1) -- apex_vault.enc
           openssl enc -d -aes-256-cbc -pbkdf2 -in apex_vault.enc -out vault.tar.gz -pass env:VAULT_PASS
           tar -xzf vault.tar.gz && rm -f vault.tar.gz
           sed -i 's/^ c2 =/c2 =/; s/^ c3 =/c3 =/' final_fix.py
@@ -84,9 +84,7 @@ jobs:
           open(mp, "w", encoding="utf-8").write(m)
           sp = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
           s = open(sp, encoding="utf-8").read()
-          s = re.sub(r"private var ttsReady = false\s+private var onlinePlayer", "private var onlinePlayer", s)
-          
-                    
+          s = s.replace("private var ttsReady = false" + chr(10) + chr(10) + "    private var onlinePlayer", "private var onlinePlayer")
           s = s.replace("private fun muteBeepBriefly() {", "private fun muteBeepBriefly() { if (true) return;")
           s = s.replace("Джарвис на связи", "Apex AI на связи")
           s = s.replace("Bearer " + chr(36) + "key", f"Bearer {new_key}")
