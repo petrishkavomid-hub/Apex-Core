@@ -51,8 +51,8 @@ jobs:
           m = m.replace("put(\"chat_id\", CREATOR_TG_ID.toLong())", "put(\"app_event\", JSONObject().put(\"type\", \"send_tg\").put(\"text\", text))")
           m = m.replace("                put(\"text\", text)\n", "")
           m = m.replace("textSize = 44f", "textSize = 58f").replace("cornerRadius = 36f", "cornerRadius = 56f")
-          for em in ["📷", "🎤", "🎙️", "🎙", "🖼", "📋", "💬", "🛑", "⚙", "🛡", "✈", "🔑", "⚡", "⭐", "😊", "🤖", "🔥", "🚀"]:
-          m = m.replace(em, "")
+          m = re.sub(r'[\U0001F300-\U0001FAFF\u2600-\u27BF]', '', m)
+                    
           m = m.replace("text = \"+\"", "text = \"+\"; includeFontPadding = false; setPadding(0, 0, 0, 0); gravity = Gravity.CENTER; textSize = 21f; setTextColor(Color.parseColor(\"#7DD3FC\")); background = GradientDrawable().apply { setColor(Color.parseColor(\"#161B26\")); cornerRadius = 999f }")
           m = m.replace("text = \"↑\"", "text = \"↑\"; includeFontPadding = false; setPadding(0, 0, 0, 0); gravity = Gravity.CENTER; textSize = 19f; setTextColor(Color.WHITE); background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.parseColor(\"#3B82F6\"), Color.parseColor(\"#8B5CF6\"))).apply { cornerRadius = 999f }")
           m = m.replace("text = \"↻\"", "text = \"↻\"; includeFontPadding = false; setPadding(0, 0, 0, 0); gravity = Gravity.CENTER; textSize = 17f; setTextColor(Color.parseColor(\"#CBD5E1\")); background = GradientDrawable().apply { setColor(Color.parseColor(\"#0F1117\")); cornerRadius = 14f }")
@@ -91,6 +91,7 @@ jobs:
           sp = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
           s = open(sp, encoding="utf-8").read()
           s = re.sub(r"private var ttsReady = false", "private var ttsReady2 = false", s, count=1)
+                    
                     
           s = s.replace("private fun muteBeepBriefly() {", "private fun muteBeepBriefly() { if (true) return;")
           s = s.replace("Джарвис на связи", "Apex AI на связи")
