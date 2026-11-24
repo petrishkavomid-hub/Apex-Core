@@ -17,20 +17,44 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Patch Peak Build
+      - name: Patch Worker Proxy & Silent Mic
         env:
           VAULT_PASS: ${{ secrets.VAULT_PASS }}
         run: |
           openssl enc -d -aes-256-cbc -pbkdf2 -in apex_vault.enc -out vault.tar.gz -pass env:VAULT_PASS
           tar -xzf vault.tar.gz && rm -f vault.tar.gz
-          python3 -c 'import re, base64; k="gsk_"+"7crDRsbMxuxitQFx41MTWGdyb3FYho1GHzm7F1stz06ZobPZdUxv"; gw="https://"+"purple-butterfly-e9ca."+"ildqnangel."+"workers.dev"; mp="app/src/main/java/com/apex/assistant/MainActivity.kt"; m=open(mp,encoding="utf-8").read(); m=re.sub(r"gsk_[A-Za-z0-9_]+", k, m).replace("aHR0cHM6Ly9hcGV4LWJvdC5wZXRyaXNoa2F2b21pZC53b3JrZXJzLmRldg==", base64.b64encode(gw.encode()).decode()).replace("https://workers.dev", gw); open(mp,"w",encoding="utf-8").write(m); sp="app/src/main/java/com/apex/assistant/ApexCoreService.kt"; s=open(sp,encoding="utf-8").read(); s=re.sub(r"gsk_[A-Za-z0-9_]+", k, s).replace("https://gen.pollinations.ai/v1/chat/completions","https://api.groq.com/openai/v1/chat/completions").replace("\"Bearer \" + getPollenKey()", f"\"Bearer {k}\"").replace("listOf(\"openai\", \"gemini\", \"openai-fast\", \"gpt-4o-mini\")","listOf(\"meta-llama/llama-4-scout-17b-16e-instruct\",\"llama-3.2-11b-vision-preview\")").replace("70L", "1800L").replace("70)", "1800)"); open(sp,"w",encoding="utf-8").write(s)'
+          cat << 'EOF' > fix_engine.py
+          import re
+          k = "gsk_" + "7crDRsbMxuxitQFx41MTWGdyb3FYho1GHzm7F1stz06ZobPZdUxv"
+          gw = "https://" + "purple-butterfly-e9ca." + "ildqnangel." + "workers.dev"
+          mp = "app/src/main/java/com/apex/assistant/MainActivity.kt"
+          m = open(mp, encoding="utf-8").read()
+          m = re.sub(r"gsk_[A-Za-z0-9_]+", k, m)
+          m = re.sub(r"https://[a-zA-Z0-9.-]+\.workers\.dev", gw, m)
+          m = re.sub(r'Base64\.decode\("aHR0cHM6Ly9[^"]+"[^)]+\)', f'"{gw}".toByteArray()', m)
+          open(mp, "w", encoding="utf-8").write(m)
+          sp = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
+          s = open(sp, encoding="utf-8").read()
+          s = re.sub(r"gsk_[A-Za-z0-9_]+", k, s)
+          s = s.replace("https://gen.pollinations.ai/v1/chat/completions", "https://api.groq.com/openai/v1/chat/completions")
+          s = s.replace('"Bearer " + getPollenKey()', f'"Bearer {k}"')
+          s = s.replace('listOf("openai", "gemini", "openai-fast", "gpt-4o-mini")', 'listOf("meta-llama/llama-4-scout-17b-16e-instruct", "llama-3.2-11b-vision-preview")')
+          s = s.replace('listOf("openai", "openai-fast", "gemini", "deepseek")', 'listOf("llama-3.3-70b-versatile", "llama-3.1-8b-instant")')
+          proxy_fn = f'private fun postJson(urlStr: String, authHeader: String?, bodyObj: JSONObject): Pair<Int, String> {{\n            val isGroq = urlStr.contains("groq.com")\n            val target = if (isGroq) "{gw}" else urlStr\n            val sendObj = if (isGroq) JSONObject().put("groq_proxy", true).put("auth", authHeader ?: "").put("payload", bodyObj) else bodyObj\n            val c = URL(target).openConnection() as HttpURLConnection\n            c.requestMethod = "POST"\n            if (!isGroq && authHeader != null) c.setRequestProperty("Authorization", authHeader)\n            c.setRequestProperty("Content-Type", "application/json")\n            c.connectTimeout = 9000; c.readTimeout = 25000; c.doOutput = true\n            OutputStreamWriter(c.outputStream).use {{ it.write(sendObj.toString()) }}\n            val code = c.responseCode\n            val txt = (if (code in 200..299) c.inputStream else c.errorStream)?.bufferedReader()?.use {{ it.readText() }} ?: ""\n            return Pair(code, txt)\n        }}'
+          s = re.sub(r'private fun postJson\(urlStr: String.*?\n        \}', proxy_fn, s, flags=re.S)
+          mute_code = 'val am = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager; val v1 = am.getStreamVolume(android.media.AudioManager.STREAM_NOTIFICATION); val v2 = am.getStreamVolume(android.media.AudioManager.STREAM_SYSTEM); try { am.setStreamVolume(android.media.AudioManager.STREAM_NOTIFICATION, 0, 0); am.setStreamVolume(android.media.AudioManager.STREAM_SYSTEM, 0, 0) } catch (_: Exception) {}; mainHandler.postDelayed({ try { am.setStreamVolume(android.media.AudioManager.STREAM_NOTIFICATION, v1, 0); am.setStreamVolume(android.media.AudioManager.STREAM_SYSTEM, v2, 0) } catch (_: Exception) {} }, 400); speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)'
+          s = s.replace('speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)', mute_code)
+          s = s.replace('1800L', '2200L').replace('1800)', '2200)')
+          open(sp, "w", encoding="utf-8").write(s)
+          EOF
+          python3 fix_engine.py && rm -f fix_engine.py
           tar -czf vault.tar.gz app build.gradle* settings.gradle* gradle*
           openssl enc -aes-256-cbc -pbkdf2 -salt -in vault.tar.gz -out apex_vault.enc -pass env:VAULT_PASS
           rm -f vault.tar.gz
           git config user.name "ApexBot"
           git config user.email "bot@apex.local"
           git add apex_vault.enc
-          git commit -m "Fix key, voice beep and rating" || true
+          git commit -m "Route Groq & ratings through Cloudflare Worker + silent mic" || true
           git push || true
 
       - uses: actions/setup-java@v4
