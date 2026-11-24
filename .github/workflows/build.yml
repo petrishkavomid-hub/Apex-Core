@@ -83,7 +83,8 @@ jobs:
           m = m.replace('text = "Скопировать"', 'text = "Скопировать" }; (parent as? LinearLayout)?.addView(TextView(this@MainActivity).apply { text = "Озвучить"; setTextColor(Color.parseColor("#38BDF8")); textSize = 11.5f; setPadding(24, 8, 12, 8); setOnClickListener { startService(Intent(this@MainActivity, ApexCoreService::class.java).apply { action = "SPEAK_TEXT"; putExtra("text", cleanText) }) } }); TextView(this@MainActivity).apply { visibility = android.view.View.GONE')
           open(mp, "w", encoding="utf-8").write(m)
           sp = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
-          s = open(sp, encoding="utf-8").read()
+          s = s.replace("private var tts: TextToSpeech? = null" + chr(10) + "    private var ttsReady = false", "private var tts: TextToSpeech? = null")
+                    
           s = s.replace("private var ttsReady = false", "", 1)
                     
           s = s.replace("private fun muteBeepBriefly() {", "private fun muteBeepBriefly() { if (true) return;")
