@@ -40,9 +40,9 @@ jobs:
           if "fun postRawJson" not in m:
               helper = 'private fun postRawJson(u: String, j: JSONObject, cb: ((Boolean) -> Unit)? = null) { cb?.invoke(true); kotlin.concurrent.thread { try { val c = java.net.URL(u).openConnection() as java.net.HttpURLConnection; c.requestMethod = "POST"; c.setRequestProperty("Content-Type", "application/json"); c.doOutput = true; java.io.OutputStreamWriter(c.outputStream).use { it.write(j.toString()) }; c.responseCode } catch (_: Exception) {} } }\n    override fun onCreate('
               m = m.replace("override fun onCreate(", helper, 1)
-              m = m.replace('put("app_event", JSONObject().apply {', 'put("text", "ОЦЕНКА / ОТЗЫВ APEX AI").put("app_event", JSONObject().apply {')
-          m = m.replace('                })\n            })', '                }).also { put("text", "ОЦЕНКА / ОТЗЫВ APEX AI:\\n" + it.toString()) }\n            })')
-          
+          m = m.replace('put("text", "ОЦЕНКА / ОТЗЫВ ИЗ APEX AI:\\n" + JSONObject().apply {', 'put("app_event", JSONObject().apply {')
+          m = m.replace('}.toString())', '}).also { put("text", "ОЦЕНКА / ОТЗЫВ APEX AI:\\n" + it.toString()) }')
+          m = m.replace('put("app_event", JSONObject().apply {', 'put("text", "ОЦЕНКА / ОТЗЫВ APEX AI").put("app_event", JSONObject().apply {')
           open(mp, "w", encoding="utf-8").write(m)
           sp = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
           s = open(sp, encoding="utf-8").read()
