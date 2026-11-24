@@ -67,7 +67,8 @@ jobs:
           L.append('import java.net.HttpURLConnection')
           L.append('import java.net.URL')
           L.append('import kotlin.concurrent.thread')
-          L.append('class MainActivity : Activity() {')
+          L.append('class MainActivity : Activity() { companion object { val CREATOR_IDS = listOf("7485305471") }')
+                    
           L.append('    private lateinit var prefs: SharedPreferences')
           L.append('    private lateinit var drawerLayout: DrawerLayout')
           L.append('    private lateinit var messagesContainer: LinearLayout')
@@ -188,6 +189,8 @@ jobs:
           L.append('    private fun checkOtaUpdate() { thread { try { val c = URL("https://api.github.com/repos/petrishkavomid-hub/Apex-Core/releases/latest").openConnection() as HttpURLConnection; c.setRequestProperty("User-Agent", "ApexAI"); if (c.responseCode in 200..299) { val rel = JSONObject(c.inputStream.bufferedReader().use { it.readText() }); val tag = rel.optString("tag_name", ""); val url = rel.optJSONArray("assets")?.optJSONObject(0)?.optString("browser_download_url", "") ?: ""; val saved = prefs.getString("installed_release_tag", "") ?: ""; if (tag.isNotEmpty() && saved.isEmpty()) prefs.edit().putString("installed_release_tag", tag).apply() else if (tag.isNotEmpty() && tag != saved && url.isNotEmpty()) runOnUiThread { AlertDialog.Builder(this).setTitle("Доступно обновление (" + tag + ")").setMessage("Обновить приложение без потери данных?").setPositiveButton("Обновить") { _, _ -> thread { try { val f = java.io.File(cacheDir, "upd.apk"); URL(url).openStream().use { inp -> f.outputStream().use { out -> inp.copyTo(out) } }; prefs.edit().putString("installed_release_tag", tag).apply(); runOnUiThread { val uri = androidx.core.content.FileProvider.getUriForFile(this, packageName + ".fileprovider", f); startActivity(Intent(Intent.ACTION_VIEW).apply { setDataAndType(uri, "application/vnd.android.package-archive"); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK) }) } } catch (_: Exception) {} } }.setNegativeButton("Позже", null).show() } } } catch (_: Exception) {} } }')
           L.append('    override fun onDestroy() { super.onDestroy(); try { unregisterReceiver(receiver) } catch (_: Exception) {} }')
           L.append('}')
+          L = [x.replace("phase + k)", "(phase + k).toDouble()") for x in L]
+                    
           open("app/src/main/java/com/apex/assistant/MainActivity.kt", "w", encoding="utf-8").write("\n".join(L))
           sp = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
           s = open(sp, encoding="utf-8").read()
