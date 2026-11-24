@@ -17,42 +17,51 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Direct AI, Telegram Rating & Clean Voice
+      - name: Tune Speed, Alarm, 60s Mic & Direct TG Rating
         env:
           VAULT_PASS: ${{ secrets.VAULT_PASS }}
         run: |
           openssl enc -d -aes-256-cbc -pbkdf2 -in apex_vault.enc -out vault.tar.gz -pass env:VAULT_PASS
           tar -xzf vault.tar.gz && rm -f vault.tar.gz
-          cat << 'EOF' > patch_direct.py
-          import re
+          cat << 'EOF' > tune_apex.py
+          import re, os
+          man_p = "app/src/main/AndroidManifest.xml"
+          if os.path.exists(man_p):
+              man = open(man_p, encoding="utf-8").read()
+              if "SET_ALARM" not in man:
+                  man = man.replace("<application", '<uses-permission android:name="com.android.alarm.permission.SET_ALARM" />\n    <application', 1)
+              open(man_p, "w", encoding="utf-8").write(man)
           tg_tok = "8813383592:AAEq3jtBj3G9qeSr3KRSvUhOEFpmCHYfuog"
           tg_url = f"https://api.telegram.org/bot{tg_tok}/sendMessage"
           mp = "app/src/main/java/com/apex/assistant/MainActivity.kt"
           m = open(mp, encoding="utf-8").read()
-          m = re.sub(r"https://[a-zA-Z0-9.-]+\.workers\.dev", tg_url, m)
-          m = re.sub(r'Base64\.decode\("aHR0cHM6Ly9[^"]+"[^)]+\)', f'"{tg_url}".toByteArray()', m)
+          m = re.sub(r'postToWorker\(prefs,\s*JSONObject\(\)\.apply\s*\{', f'postRawJson("{tg_url}", JSONObject().apply {{ put("chat_id", 5347874574L); ', m)
+          if "fun postRawJson" not in m:
+              helper = 'private fun postRawJson(u: String, j: JSONObject) { kotlin.concurrent.thread { try { val c = java.net.URL(u).openConnection() as java.net.HttpURLConnection; c.requestMethod = "POST"; c.setRequestProperty("Content-Type", "application/json"); c.doOutput = true; java.io.OutputStreamWriter(c.outputStream).use { it.write(j.toString()) }; c.responseCode } catch (_: Exception) {} } }\n    override fun onCreate('
+              m = m.replace("override fun onCreate(", helper, 1)
+          m = m.replace('put("app_event", JSONObject().apply {', 'put("text", "ОЦЕНКА / ОТЗЫВ ИЗ APEX AI:\\n" + JSONObject().apply {')
+          m = m.replace('                })\n            })', '                }.toString())\n            })')
           open(mp, "w", encoding="utf-8").write(m)
           sp = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
           s = open(sp, encoding="utf-8").read()
-          s = s.replace("https://api.groq.com/openai/v1/chat/completions", "https://text.pollinations.ai/openai")
-          s = s.replace("https://gen.pollinations.ai/v1/chat/completions", "https://text.pollinations.ai/openai")
-          s = s.replace('"llama-3.3-70b-versatile"', '"openai"')
-          s = s.replace('listOf("meta-llama/llama-4-scout-17b-16e-instruct", "llama-3.2-11b-vision-preview")', 'listOf("openai", "openai-large")')
-          s = s.replace('listOf("llama-3.3-70b-versatile", "llama-3.1-8b-instant")', 'listOf("openai", "mistral")')
-          direct_fn = 'private fun postJson(urlStr: String, authHeader: String?, bodyObj: JSONObject): Pair<Int, String> {\n            val target = if (urlStr.contains("workers.dev") || urlStr.contains("groq.com")) "https://text.pollinations.ai/openai" else urlStr\n            val sendObj = if (bodyObj.has("payload")) bodyObj.getJSONObject("payload") else bodyObj\n            sendObj.put("model", "openai")\n            val c = URL(target).openConnection() as HttpURLConnection\n            c.requestMethod = "POST"\n            c.setRequestProperty("Content-Type", "application/json")\n            c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126.0 Mobile Safari/537.36")\n            c.connectTimeout = 10000; c.readTimeout = 25000; c.doOutput = true\n            OutputStreamWriter(c.outputStream).use { it.write(sendObj.toString()) }\n            val code = c.responseCode\n            val txt = (if (code in 200..299) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText() } ?: ""\n            return Pair(code, txt)\n        }'
-          s = re.sub(r'private fun postJson\(urlStr: String.*?\n        \}', direct_fn, s, flags=re.S)
-          s = re.sub(r'val am = getSystemService.*?speechRecognizer = SpeechRecognizer\.createSpeechRecognizer\(this\)', 'speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)', s, flags=re.S)
-          s = s.replace("2200L", "1400L").replace("2200)", "1400)")
+          s = s.replace('sendObj.put("model", "openai")', 'val hasImg = sendObj.toString().contains("image_url"); sendObj.put("model", if (hasImg) "openai" else "openai-fast")')
+          s = s.replace('listOf("openai", "openai-large")', 'listOf("openai")')
+          s = s.replace('listOf("openai", "mistral")', 'listOf("openai-fast")')
+          s = s.replace("putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, true)", "putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, false)")
+          s = s.replace("EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 500", "EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 60000L")
+          s = s.replace("EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 400", "EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 60000L")
+          s = s.replace('putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)', 'putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true); putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 60000L)')
+          s = s.replace("1400L", "3500L").replace("1400)", "3500)")
           open(sp, "w", encoding="utf-8").write(s)
           EOF
-          python3 patch_direct.py && rm -f patch_direct.py
+          python3 tune_apex.py && rm -f tune_apex.py
           tar -czf vault.tar.gz app build.gradle* settings.gradle* gradle*
           openssl enc -aes-256-cbc -pbkdf2 -salt -in vault.tar.gz -out apex_vault.enc -pass env:VAULT_PASS
           rm -f vault.tar.gz
           git config user.name "ApexBot"
           git config user.email "bot@apex.local"
           git add apex_vault.enc
-          git commit -m "Direct Pollinations AI + Telegram bot rating + clean voice" || true
+          git commit -m "Fast openai-fast + 60s continuous mic + alarm + direct TG rating" || true
           git push || true
 
       - uses: actions/setup-java@v4
