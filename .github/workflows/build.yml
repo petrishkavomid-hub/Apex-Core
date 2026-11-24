@@ -67,7 +67,8 @@ jobs:
           L.append('import java.net.HttpURLConnection')
           L.append('import java.net.URL')
           L.append('import kotlin.concurrent.thread')
-          L.append('class MainActivity : Activity() { companion object { val CREATOR_IDS = listOf("7485305471") }')
+          L.append('class MainActivity : Activity() { companion object { val CREATOR_IDS = listOf("7485305471"); fun getActiveKey(c: Context) = c.getSharedPreferences("apex_prefs", MODE_PRIVATE).getString("api_key", "") ?: "" }')
+                    
                     
           L.append('    private lateinit var prefs: SharedPreferences')
           L.append('    private lateinit var drawerLayout: DrawerLayout')
