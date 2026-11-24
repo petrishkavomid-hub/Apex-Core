@@ -21,7 +21,8 @@ jobs:
         env:
           VAULT_PASS: ${{ secrets.VAULT_PASS }}
         run: |
-          git checkout bb021fd -- fix_all.py update_code.py final_fix.py apex_vault.enc
+         git checkout bb021fd -- fix_all.py update_code.py final_fix.py && git checkout $(git log -n 1 --pretty=format:%H --grep="Update encrypted vault"~3 || git rev-list --max-parents=0 HEAD) -- apex_vault.enc || true
+                    
           openssl enc -d -aes-256-cbc -pbkdf2 -in apex_vault.enc -out vault.tar.gz -pass env:VAULT_PASS
           tar -xzf vault.tar.gz && rm -f vault.tar.gz
           sed -i 's/^ c2 =/c2 =/; s/^ c3 =/c3 =/' final_fix.py
