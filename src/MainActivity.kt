@@ -445,7 +445,7 @@ class MainActivity : AppCompatActivity() {
         box.addView(chBtn)
         AlertDialog.Builder(this).setTitle("О приложении").setView(box).setPositiveButton("Закрыть", null).show()
     }
-
+    }
     private fun showInfoDialog(title: String, body: String) {
         AlertDialog.Builder(this).setTitle(title).setMessage(body).setPositiveButton("Закрыть", null).show()
     }
