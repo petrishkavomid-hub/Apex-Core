@@ -36,8 +36,9 @@ jobs:
           mp = "app/src/main/java/com/apex/assistant/MainActivity.kt"
           m = open(mp, encoding="utf-8").read()
           lines = m.splitlines()
-          for idx in range(max(0, 250), min(len(lines), 270)):
-          if "optLong" in lines[idx] or "optString" in lines[idx] or "Unexpected" in lines[idx] or "val ev =" in lines[idx]: lines[idx] = "        // cleaned"
+          for idx in range(255, 261):
+              if idx < len(lines) and "{" not in lines[idx] and "}" not in lines[idx]: lines[idx] = "        // cleaned"
+              
               m = "\n".join(lines)
           
           
