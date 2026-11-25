@@ -21,8 +21,7 @@ jobs:
         env:
           VAULT_PASS: ${{ secrets.VAULT_PASS }}
         run: |
-          git checkout $(git rev-list -n 1 --before="4 days ago" HEAD -- apex_vault.enc) -- apex_vault.enc
-                    
+         git checkout $(git log --reverse --format=%H -- apex_vault.enc | head -n 1) -- apex_vault.enc         
           openssl enc -d -aes-256-cbc -pbkdf2 -in apex_vault.enc -out vault.tar.gz -pass env:VAULT_PASS
           tar -xzf vault.tar.gz && rm -f vault.tar.gz
           cat << 'EOF' > tune_apex.py
