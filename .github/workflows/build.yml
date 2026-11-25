@@ -1070,7 +1070,7 @@ jobs:
                               starViews.forEachIndexed { idx, v -> v.setTextColor(Color.parseColor(if (idx < i) "#FBBF24" else "#334155")) }
                           }
                       }
-                      starViews.add(sv); starsRow.add(sv)
+                      starViews.add(sv); starsRow.addView(sv)
                   }
                   val commentEt = EditText(this).apply {
                       hint = "Напишите отзыв или пожелание..."
