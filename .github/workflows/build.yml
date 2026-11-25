@@ -1432,7 +1432,8 @@ jobs:
                                   val m = arr.getJSONObject(i)
                                   val r = m.getString("r")
                                   val t = m.getString("t")
-                                  messages.add(r to t)
+                                  messages.add(Pair(r, t))
+                                  
                                   if (r == "user") addUserBubble(t) else addBotBubble(t)
                               }
                               drawer.closeDrawers()
