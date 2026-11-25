@@ -36,9 +36,9 @@ jobs:
           mp = "app/src/main/java/com/apex/assistant/MainActivity.kt"
           m = open(mp, encoding="utf-8").read()
           lines = m.splitlines()
-          for idx in range(255, 276):
-                    
-              if idx < len(lines) and "{" not in lines[idx] and "}" not in lines[idx]: lines[idx] = "        // cleaned"
+          diff = "\n".join(lines[255:276]).count("{") - "\n".join(lines[255:276]).count("}")
+          lines[255:276] = ["        " + ("{" * diff if diff > 0 else "}" * (-diff))]
+          
               
               m = "\n".join(lines)
           
