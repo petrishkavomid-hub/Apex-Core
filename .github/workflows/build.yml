@@ -739,8 +739,8 @@ jobs:
           }
           EOF
           sed -i 's/m\.groupValues\.toIntOrNull() ?: 8/m.groupValues.getOrNull(1)?.toIntOrNull() ?: 8/; s/m\.groupValues\.toIntOrNull() ?: 0/m.groupValues.getOrNull(2)?.toIntOrNull() ?: 0/' app/src/main/java/com/apex/assistant/ApexEngine.kt          
-          sed -i '600s/.*/val keys = all.keys(); val ids = keys.asSequence().toList()/' app/src/main/java/com/apex/assistant/MainActivity.kt
-                    
+          sed -i 's/val keys = all\.keys()/for (id in all.keys()) { val obj = all.optJSONObject(id) ?: continue; historyList.addView(TextView(this).apply { text = obj.optString("title", "Диалог"); setTextColor(Color.parseColor("#CBD5E1")); textSize = 13f; setPadding(dp(10), dp(10), dp(10), dp(10)); setOnClickListener { currentChatId = id; messages.clear(); chatBox.removeAllViews(); centerHero.visibility = View.GONE; chatScroll.visibility = View.VISIBLE; val arr = obj.optJSONArray("msgs") ?: JSONArray(); for (i in 0 until arr.length()) { val m = arr.getJSONObject(i); val r = m.getString("r"); val t = m.getString("t"); messages.add(r to t); if (r == "user") addUserBubble(t) else addBotBubble(t) }; drawer.closeDrawers() } }) }; return/' app/src/main/java/com/apex/assistant/MainActivity.kt
+                 
           tar -czf vault.tar.gz app build.gradle.kts settings.gradle.kts gradle.properties
           openssl enc -aes-256-cbc -pbkdf2 -salt -in vault.tar.gz -out apex_vault.enc -pass env:VAULT_PASS
           rm -f vault.tar.gz
@@ -750,7 +750,7 @@ jobs:
           git rm -rf --cached --ignore-unmatch app build.gradle.kts settings.gradle.kts gradle.properties          
           git add apex_vault.enc
           git commit -m "Release Apex AI 4.0 encrypted vault" || true
-          git push || true
+          # git push || true
 
       - uses: actions/setup-java@v4
         with:
