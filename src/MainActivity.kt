@@ -84,7 +84,7 @@ class MainActivity : AppCompatActivity() {
         ThemeSpec("green", "#03170F", "#07291B", "#14532D", "#ECFDF5", "#6EE7B7", "#059669")
     )
 
-    private fun currentTheme(): ThemeSpec = themes.firstOrNull { it.id == (prefs.getString("theme_id", "black") ?: "black") } ?: themes
+    private fun currentTheme(): ThemeSpec = themes.firstOrNull { it.id == (prefs.getString("theme_id", "black") ?: "black") } ?: themes[0]
 
     private val pickChatImageLauncher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         if (uri != null) {
@@ -395,11 +395,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun showAccessGate() {
-        val t = currentTheme(); val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(22), dp(22), dp(22), dp(22)); setBackgroundColor(Color.parseColor(t.surface)) }
-        box.addView(TextView(this).apply { text = "Бесплатный доступ к Apex AI"; textSize = 19f; typeface = Typeface.DEFAULT_BOLD; gravity = Gravity.CENTER; setTextColor(Color.parseColor(t.textPrimary)) })
-        box.addView(TextView(this).apply { text = "Для бесплатного использования приложения подпишитесь на наш официальный Telegram-канал по кнопке ниже, после чего нажмите «Продолжить»."; textSize = 14f; gravity = Gravity.CENTER; setTextColor(Color.parseColor(t.textSecondary)); setPadding(0, dp(12), 0, dp(20)) })
-        val dlg = AlertDialog.Builder(this).setView(box).setCancelable(false).create()
+     
             private fun showAccessGate() {
         val t = currentTheme()
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(22), dp(22), dp(22), dp(22)); setBackgroundColor(Color.parseColor(t.surface)) }
@@ -445,7 +441,7 @@ class MainActivity : AppCompatActivity() {
         box.addView(chBtn)
         AlertDialog.Builder(this).setTitle("О приложении").setView(box).setPositiveButton("Закрыть", null).show()
     }
-    }
+    
     private fun showInfoDialog(title: String, body: String) {
         AlertDialog.Builder(this).setTitle(title).setMessage(body).setPositiveButton("Закрыть", null).show()
     }
