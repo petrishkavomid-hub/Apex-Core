@@ -464,4 +464,4 @@ class VectorNavIcon(ctx: Context, private val type: String) : View(ctx) {
             "info" -> { canvas.drawCircle(w * 0.5f, h * 0.5f, w * 0.36f, p); canvas.drawLine(w * 0.5f, h * 0.46f, w * 0.5f, h * 0.68f, p); canvas.drawPoint(w * 0.5f, h * 0.32f, p) }
         }
     }
-
+}
