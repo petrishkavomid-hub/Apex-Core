@@ -1,4 +1,4 @@
-name: Step 1 Create ApexEngine
+name: Build Apex AI 4.0 Secure
 
 on:
   push:
@@ -9,204 +9,765 @@ permissions:
   contents: write
 
 jobs:
-  step1:
+  build:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Remove bot.py. & Create ApexEngine
+      - name: Generate MainActivity UI & Encrypt Vault
+        env:
+          VAULT_PASS: ${{ secrets.VAULT_PASS }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
         run: |
-          git config user.name "ApexBot"
-          git config user.email "bot@apex.local"
-          git rm -f --ignore-unmatch "bot.py."
-          mkdir -p app/src/main/java/com/apex/assistant app/src/main/res/drawable
+          if [ -f apex_vault.enc ] && [ ! -d app ]; then
+            openssl enc -d -aes-256-cbc -pbkdf2 -in apex_vault.enc -out vault.tar.gz -pass env:VAULT_PASS
+            tar -xzf vault.tar.gz && rm -f vault.tar.gz
+          fi
 
-          cat << 'EOF' > app/build.gradle.kts
-          plugins {
-              id("com.android.application")
-              id("org.jetbrains.kotlin.android")
-          }
-          android {
-              namespace = "com.apex.assistant"
-              compileSdk = 34
-              defaultConfig {
-                  applicationId = "com.apex.assistant"
-                  minSdk = 26
-                  targetSdk = 34
-                  versionCode = 1
-                  versionName = "4.0"
-                  val tgTok = System.getenv("TG_BOT_TOKEN") ?: ""
-                  buildConfigField("String", "TG_BOT_TOKEN", "\"$tgTok\"")
-              }
-              buildFeatures { buildConfig = true }
-              compileOptions {
-                  sourceCompatibility = JavaVersion.VERSION_17
-                  targetCompatibility = JavaVersion.VERSION_17
-              }
-              kotlinOptions { jvmTarget = "17" }
-          }
-          dependencies {
-              implementation("androidx.core:core-ktx:1.12.0")
-              implementation("androidx.appcompat:appcompat:1.6.1")
-          }
-          EOF
+          mkdir -p app/src/main/java/com/apex/assistant
 
-          cat << 'EOF' > app/src/main/res/drawable/ic_launcher.xml
-          <vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-              <path android:fillColor="#070A12" android:pathData="M0,0h108v108h-108z"/>
-              <path android:strokeColor="#38BDF8" android:strokeWidth="4" android:pathData="M54,18 A36,36 0 1,1 53.9,18 Z"/>
-              <path android:fillColor="#FFFFFF" android:pathData="M54,32 L70,74 L62,74 L58.5,64 L49.5,64 L46,74 L38,74 Z M54,43 L51.2,57 L56.8,57 Z"/>
-          </vector>
-          EOF
-
-          cat << 'EOF' > app/src/main/AndroidManifest.xml
-          <?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <uses-permission android:name="android.permission.INTERNET" />
-              <uses-permission android:name="android.permission.RECORD_AUDIO" />
-              <uses-permission android:name="android.permission.CAMERA" />
-              <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
-              <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
-              <application android:allowBackup="true" android:icon="@drawable/ic_launcher" android:label="Apex AI" android:theme="@style/Theme.AppCompat.NoActionBar">
-                  <activity android:name=".MainActivity" android:exported="true" android:windowSoftInputMode="adjustResize">
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN" />
-                          <category android:name="android.intent.category.LAUNCHER" />
-                      </intent-filter>
-                  </activity>
-              </application>
-          </manifest>
-          EOF
-                    cat << 'EOF' > app/src/main/java/com/apex/assistant/ApexEngine.kt
+          cat << 'EOF' > app/src/main/java/com/apex/assistant/MainActivity.kt
           package com.apex.assistant
 
+          import android.Manifest
+          import android.animation.ValueAnimator
+          import android.app.AlertDialog
+          import android.content.ClipData
+          import android.content.ClipboardManager
           import android.content.Context
           import android.content.Intent
-          import android.hardware.camera2.CameraManager
-          import android.provider.AlarmClock
+          import android.content.pm.PackageManager
+          import android.graphics.*
+          import android.graphics.drawable.GradientDrawable
+          import android.net.Uri
+          import android.os.Build
+          import android.os.Bundle
+          import android.speech.RecognitionListener
+          import android.speech.RecognizerIntent
+          import android.speech.SpeechRecognizer
+          import android.speech.tts.TextToSpeech
+          import android.speech.tts.UtteranceProgressListener
+          import android.util.Base64
+          import android.view.Gravity
+          import android.view.View
+          import android.view.animation.LinearInterpolator
+          import android.widget.*
+          import androidx.activity.result.contract.ActivityResultContracts
+          import androidx.appcompat.app.AppCompatActivity
+          import androidx.core.app.ActivityCompat
+          import androidx.core.content.ContextCompat
+          import androidx.drawerlayout.widget.DrawerLayout
           import org.json.JSONArray
           import org.json.JSONObject
-          import java.io.OutputStreamWriter
-          import java.net.HttpURLConnection
-          import java.net.URL
+          import java.io.ByteArrayOutputStream
+          import java.util.Locale
+          import java.util.UUID
+          import kotlin.concurrent.thread
+          import kotlin.math.sin
+          import kotlin.random.Random
+              class MainActivity : AppCompatActivity() {
+              private lateinit var drawer: DrawerLayout
+              private lateinit var centerHero: LinearLayout
+              private lateinit var heroGreeting: TextView
+              private lateinit var chatScroll: ScrollView
+              private lateinit var chatBox: LinearLayout
+              private lateinit var historyList: LinearLayout
+              private lateinit var input: EditText
+              private lateinit var micBtn: ImageView
+              private lateinit var photoChip: LinearLayout
+              private lateinit var photoChipText: TextView
 
-          object ApexEngine {
-              private const val AI_URL = "https://text.pollinations.ai/openai"
-              private const val ADMIN_ID = 5347874574L
-              private var torchOn = false
+              private var pendingImageB64: String? = null
+              private var tts: TextToSpeech? = null
+              private var activeSpeakBtn: TextView? = null
+              private var recognizer: SpeechRecognizer? = null
+              private var isListening = false
+              private var currentChatId = UUID.randomUUID().toString()
+              private val messages = mutableListOf<Pair<String, String>>()
 
-              fun runLocalCommand(ctx: Context, raw: String): String? {
-                  val q = raw.lowercase().trim()
-                  if (q.contains("фонарик")) {
-                      return try {
-                          val cm = ctx.getSystemService(Context.CAMERA_SERVICE) as CameraManager
-                          val id = cm.cameraIdList.firstOrNull() ?: return "Камера не найдена."
-                          torchOn = !q.contains("выкл") && !q.contains("погас")
-                          cm.setTorchMode(id, torchOn)
-                          if (torchOn) "Фонарик включён." else "Фонарик выключен."
-                      } catch (_: Exception) { "Не удалось переключить фонарик." }
+              private val greetings = listOf(
+                  "Чем помочь сегодня?",
+                  "С чего начнём?",
+                  "Спросите всё, что угодно"
+              )
+
+              private val pickImage = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+                  uri ?: return@registerForActivityResult
+                  try {
+                      val stream = contentResolver.openInputStream(uri)
+                      val bmp = BitmapFactory.decodeStream(stream)
+                      stream?.close()
+                      if (bmp != null) {
+                          val ratio = minOf(840f / bmp.width, 840f / bmp.height, 1f)
+                          val scaled = Bitmap.createScaledBitmap(bmp, (bmp.width * ratio).toInt(), (bmp.height * ratio).toInt(), true)
+                          val out = ByteArrayOutputStream()
+                          scaled.compress(Bitmap.CompressFormat.JPEG, 78, out)
+                          pendingImageB64 = Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+                          photoChipText.text = "Фото прикреплено"
+                          photoChip.visibility = View.VISIBLE
+                      }
+                  } catch (_: Exception) {
+                      Toast.makeText(this, "Не удалось загрузить фото", Toast.LENGTH_SHORT).show()
                   }
-                  if (q.contains("будильник")) {
-                      val m = Regex("(\\d{1,2})[:.\\s-](\\d{2})").find(q)
-                      if (m != null) {
-                          val h = m.groupValues.toIntOrNull() ?: 8
-                          val min = m.groupValues.toIntOrNull() ?: 0
-                          return try {
-                              ctx.startActivity(Intent(AlarmClock.ACTION_SET_ALARM).apply {
-                                  putExtra(AlarmClock.EXTRA_HOUR, h)
-                                  putExtra(AlarmClock.EXTRA_MINUTES, min)
-                                  putExtra(AlarmClock.EXTRA_SKIP_UI, false)
-                                  addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                              })
-                              "Ставлю будильник на %02d:%02d.".format(h, min)
-                          } catch (_: Exception) { "Не удалось открыть часы." }
+              }
+
+              private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
+                  override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  window.statusBarColor = Color.parseColor("#060911")
+                  window.navigationBarColor = Color.parseColor("#060911")
+
+                  if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                      ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA), 101)
+                  }
+
+                  tts = TextToSpeech(this) { status ->
+                      if (status == TextToSpeech.SUCCESS) {
+                          tts?.language = Locale("ru", "RU")
+                          tts?.setPitch(0.88f)
+                          tts?.setSpeechRate(0.98f)
+                          tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                              override fun onStart(id: String?) {}
+                              override fun onError(id: String?) { runOnUiThread { resetSpeakBtn() } }
+                              override fun onDone(id: String?) {
+                                  if (id == "LAST_SEG") runOnUiThread { resetSpeakBtn() }
+                              }
+                          })
                       }
                   }
-                  if (q.startsWith("открой ") || q.startsWith("запусти ")) {
-                      val target = q.removePrefix("открой ").removePrefix("запусти ").trim()
-                      val aliases = mapOf(
-                          "ютуб" to "youtube",
-                          "телеграм" to "telegram",
-                          "тг" to "telegram",
-                          "ватсап" to "whatsapp",
-                          "вк" to "vkontakte",
-                          "настройки" to "settings",
-                          "камеру" to "camera",
-                          "браузер" to "chrome",
-                          "карты" to "maps"
-                      )
-                      val key = aliases[target] ?: target
-                      val pm = ctx.packageManager
-                      val found = pm.getInstalledApplications(0).firstOrNull {
-                          pm.getApplicationLabel(it).toString().lowercase().contains(key) ||
-                              it.packageName.lowercase().contains(key)
+
+                  drawer = DrawerLayout(this)
+                  val mainFrame = FrameLayout(this).apply { setBackgroundColor(Color.parseColor("#060911")) }
+                  mainFrame.addView(StarfieldView(this), FrameLayout.LayoutParams(-1, -1))
+
+                  val rootCol = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+
+                  val topBar = LinearLayout(this).apply {
+                      orientation = LinearLayout.HORIZONTAL
+                      gravity = Gravity.CENTER_VERTICAL
+                      setPadding(dp(16), dp(14), dp(16), dp(10))
+                  }
+                  val menuBtn = TextView(this).apply {
+                      text = "☰"
+                      setTextColor(Color.parseColor("#CBD5E1"))
+                      textSize = 22f
+                      gravity = Gravity.CENTER
+                      layoutParams = LinearLayout.LayoutParams(dp(40), dp(40))
+                      setOnClickListener { drawer.openDrawer(Gravity.START) }
+                  }
+                  val titleRow = LinearLayout(this).apply {
+                      orientation = LinearLayout.HORIZONTAL
+                      gravity = Gravity.CENTER
+                      layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+                  }
+                  val appTitle = TextView(this).apply {
+                      text = "APEX AI"
+                      setTextColor(Color.WHITE)
+                      textSize = 17f
+                      letterSpacing = 0.08f
+                      setTypeface(null, Typeface.BOLD)
+                  }
+                  val verBadge = TextView(this).apply {
+                      text = "4.0"
+                      setTextColor(Color.parseColor("#38BDF8"))
+                      textSize = 11f
+                      setTypeface(null, Typeface.BOLD)
+                      setPadding(dp(8), dp(2), dp(8), dp(2))
+                      background = GradientDrawable().apply {
+                          setColor(Color.parseColor("#0F1E36"))
+                          cornerRadius = dp(10).toFloat()
+                          setStroke(1, Color.parseColor("#1D4ED8"))
                       }
-                      if (found != null) {
-                          val launch = pm.getLaunchIntentForPackage(found.packageName)
-                          if (launch != null) {
-                              launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                              ctx.startActivity(launch)
-                              return "Открываю ${pm.getApplicationLabel(found)}."
+                      layoutParams = LinearLayout.LayoutParams(-2, -2).apply { leftMargin = dp(8) }
+                  }
+                  titleRow.addView(appTitle); titleRow.addView(verBadge)
+                      val newChatTop = TextView(this).apply {
+                      text = "+"
+                      setTextColor(Color.parseColor("#38BDF8"))
+                      textSize = 24f
+                      gravity = Gravity.CENTER
+                      layoutParams = LinearLayout.LayoutParams(dp(40), dp(40))
+                      setOnClickListener { startNewChat() }
+                  }
+                  topBar.addView(menuBtn); topBar.addView(titleRow); topBar.addView(newChatTop)
+
+                  val centerContainer = FrameLayout(this).apply {
+                      layoutParams = LinearLayout.LayoutParams(-1, 0, 1f)
+                  }
+
+                  centerHero = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      gravity = Gravity.CENTER
+                      setPadding(dp(24), 0, dp(24), dp(32))
+                  }
+                  val orb = ApexOrbView(this).apply {
+                      layoutParams = LinearLayout.LayoutParams(dp(156), dp(156))
+                  }
+                  heroGreeting = TextView(this).apply {
+                      text = greetings.random()
+                      setTextColor(Color.WHITE)
+                      textSize = 24f
+                      gravity = Gravity.CENTER
+                      setTypeface(null, Typeface.BOLD)
+                      setPadding(0, dp(22), 0, dp(8))
+                  }
+                  val heroSub = TextView(this).apply {
+                      text = "Голосовой и текстовый ассистент"
+                      setTextColor(Color.parseColor("#64748B"))
+                      textSize = 14f
+                      gravity = Gravity.CENTER
+                  }
+                  centerHero.addView(orb); centerHero.addView(heroGreeting); centerHero.addView(heroSub)
+
+                  chatScroll = ScrollView(this).apply { visibility = View.GONE }
+                  chatBox = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      setPadding(dp(16), dp(12), dp(16), dp(16))
+                  }
+                  chatScroll.addView(chatBox)
+
+                  centerContainer.addView(centerHero)
+                  centerContainer.addView(chatScroll)
+
+                  photoChip = LinearLayout(this).apply {
+                      orientation = LinearLayout.HORIZONTAL
+                      gravity = Gravity.CENTER_VERTICAL
+                      visibility = View.GONE
+                      setPadding(dp(14), dp(6), dp(14), dp(6))
+                      background = GradientDrawable().apply {
+                          setColor(Color.parseColor("#111C33"))
+                          cornerRadius = dp(16).toFloat()
+                          setStroke(1, Color.parseColor("#2563EB"))
+                      }
+                      layoutParams = LinearLayout.LayoutParams(-2, -2).apply {
+                          leftMargin = dp(16); bottomMargin = dp(6)
+                      }
+                  }
+                  photoChipText = TextView(this).apply { setTextColor(Color.parseColor("#7DD3FC")); textSize = 13f }
+                  val removePhoto = TextView(this).apply {
+                      text = "  ✕"
+                      setTextColor(Color.parseColor("#F87171"))
+                      textSize = 14f
+                      setOnClickListener { pendingImageB64 = null; photoChip.visibility = View.GONE }
+                  }
+                  photoChip.addView(photoChipText); photoChip.addView(removePhoto)
+                      val capsuleOuter = RainbowCapsuleLayout(this).apply {
+                      layoutParams = LinearLayout.LayoutParams(-1, -2).apply {
+                          setMargins(dp(12), dp(4), dp(12), dp(12))
+                      }
+                  }
+                  val capsuleInner = LinearLayout(this).apply {
+                      orientation = LinearLayout.HORIZONTAL
+                      gravity = Gravity.CENTER_VERTICAL
+                      setPadding(dp(8), dp(6), dp(8), dp(6))
+                      background = GradientDrawable().apply {
+                          setColor(Color.parseColor("#0B101D"))
+                          cornerRadius = dp(26).toFloat()
+                      }
+                  }
+
+                  val attachBtn = TextView(this).apply {
+                      text = "+"
+                      setTextColor(Color.parseColor("#94A3B8"))
+                      textSize = 22f
+                      gravity = Gravity.CENTER
+                      background = GradientDrawable().apply { setColor(Color.parseColor("#151D30")); cornerRadius = 999f }
+                      layoutParams = LinearLayout.LayoutParams(dp(38), dp(38))
+                      setOnClickListener { pickImage.launch("image/*") }
+                  }
+
+                  input = EditText(this).apply {
+                      hint = "Спросите Apex AI..."
+                      setHintTextColor(Color.parseColor("#64748B"))
+                      setTextColor(Color.WHITE)
+                      textSize = 15f
+                      maxLines = 4
+                      background = null
+                      setPadding(dp(12), dp(8), dp(8), dp(8))
+                      layoutParams = LinearLayout.LayoutParams(0, -2, 1f)
+                  }
+
+                  micBtn = ImageView(this).apply {
+                      setImageResource(android.R.drawable.ic_btn_speak_now)
+                      setColorFilter(Color.parseColor("#38BDF8"))
+                      setPadding(dp(8), dp(8), dp(8), dp(8))
+                      background = GradientDrawable().apply { setColor(Color.parseColor("#151D30")); cornerRadius = 999f }
+                      layoutParams = LinearLayout.LayoutParams(dp(38), dp(38)).apply { rightMargin = dp(6) }
+                      setOnClickListener { toggleVoice() }
+                  }
+
+                  val sendBtn = TextView(this).apply {
+                      text = "↑"
+                      setTextColor(Color.WHITE)
+                      textSize = 18f
+                      setTypeface(null, Typeface.BOLD)
+                      gravity = Gravity.CENTER
+                      background = GradientDrawable().apply { setColor(Color.parseColor("#2563EB")); cornerRadius = 999f }
+                      layoutParams = LinearLayout.LayoutParams(dp(38), dp(38))
+                      setOnClickListener { sendMessage() }
+                  }
+
+                  capsuleInner.addView(attachBtn); capsuleInner.addView(input); capsuleInner.addView(micBtn); capsuleInner.addView(sendBtn)
+                  capsuleOuter.addView(capsuleInner)
+
+                  rootCol.addView(topBar); rootCol.addView(centerContainer); rootCol.addView(photoChip); rootCol.addView(capsuleOuter)
+                  mainFrame.addView(rootCol)
+
+                  val sideNav = buildSideDrawer()
+                  drawer.addView(mainFrame, DrawerLayout.LayoutParams(-1, -1))
+                  drawer.addView(sideNav, DrawerLayout.LayoutParams(dp(280), -1, Gravity.START))
+
+                  setContentView(drawer)
+                  refreshHistoryUI()
+              }
+                  private fun buildSideDrawer(): LinearLayout {
+                  val nav = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      setBackgroundColor(Color.parseColor("#090D18"))
+                      setPadding(dp(16), dp(28), dp(16), dp(20))
+                  }
+                  val header = TextView(this).apply {
+                      text = "APEX AI  4.0"
+                      setTextColor(Color.WHITE)
+                      textSize = 18f
+                      setTypeface(null, Typeface.BOLD)
+                      setPadding(dp(6), 0, 0, dp(16))
+                  }
+                  val newBtn = TextView(this).apply {
+                      text = "+   Новый диалог"
+                      setTextColor(Color.WHITE)
+                      textSize = 14f
+                      setTypeface(null, Typeface.BOLD)
+                      setPadding(dp(16), dp(12), dp(16), dp(12))
+                      background = GradientDrawable().apply { setColor(Color.parseColor("#1D4ED8")); cornerRadius = dp(14).toFloat() }
+                      setOnClickListener { startNewChat(); drawer.closeDrawers() }
+                  }
+                  val histLabel = TextView(this).apply {
+                      text = "ИСТОРИЯ ЧАТОВ"
+                      setTextColor(Color.parseColor("#64748B"))
+                      textSize = 11f
+                      setTypeface(null, Typeface.BOLD)
+                      setPadding(dp(6), dp(20), 0, dp(8))
+                  }
+                  val histScroll = ScrollView(this).apply { layoutParams = LinearLayout.LayoutParams(-1, 0, 1f) }
+                  historyList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+                  histScroll.addView(historyList)
+
+                  val divider = View(this).apply {
+                      setBackgroundColor(Color.parseColor("#1E293B"))
+                      layoutParams = LinearLayout.LayoutParams(-1, 1).apply { setMargins(0, dp(10), 0, dp(10)) }
+                  }
+                  val rateItem = TextView(this).apply {
+                      text = "★   Оценить Apex AI"
+                      setTextColor(Color.parseColor("#FBBF24"))
+                      textSize = 14f
+                      setPadding(dp(10), dp(12), dp(10), dp(12))
+                      setOnClickListener { drawer.closeDrawers(); showRatingDialog() }
+                  }
+                  val aboutItem = TextView(this).apply {
+                      text = "ⓘ   О приложении"
+                      setTextColor(Color.parseColor("#CBD5E1"))
+                      textSize = 14f
+                      setPadding(dp(10), dp(12), dp(10), dp(12))
+                      setOnClickListener {
+                          drawer.closeDrawers()
+                          AlertDialog.Builder(this@MainActivity)
+                              .setTitle("Apex AI 4.0")
+                              .setMessage("Интеллектуальный голосовой и текстовый ассистент.\n\nРазработчик: Derek Stealth\nОфициальный канал: @Apexassistantcore")
+                              .setPositiveButton("Закрыть", null)
+                              .show()
+                      }
+                  }
+                  nav.addView(header); nav.addView(newBtn); nav.addView(histLabel); nav.addView(histScroll); nav.addView(divider); nav.addView(rateItem); nav.addView(aboutItem)
+                  return nav
+              }
+                            private fun startNewChat() {
+                  currentChatId = UUID.randomUUID().toString()
+                  messages.clear()
+                  chatBox.removeAllViews()
+                  chatScroll.visibility = View.GONE
+                  centerHero.visibility = View.VISIBLE
+                  heroGreeting.text = greetings.random()
+                  stopSpeech()
+              }
+
+              private fun sendMessage(voiceText: String? = null) {
+                  val txt = (voiceText ?: input.text.toString()).trim()
+                  val img = pendingImageB64
+                  if (txt.isEmpty() && img == null) return
+                  if (voiceText == null) input.setText("")
+                  pendingImageB64 = null
+                  photoChip.visibility = View.GONE
+
+                  if (centerHero.visibility == View.VISIBLE) {
+                      centerHero.visibility = View.GONE
+                      chatScroll.visibility = View.VISIBLE
+                  }
+
+                  val userDisplay = if (img != null) "[Фото] $txt".trim() else txt
+                  addUserBubble(userDisplay)
+                  messages.add("user" to txt.ifBlank { "Опиши фото" })
+                  saveCurrentChat()
+
+                  val local = if (img == null) ApexEngine.runLocalCommand(this, txt) else null
+                  if (local != null) {
+                      messages.add("assistant" to local)
+                      addBotBubble(local)
+                      saveCurrentChat()
+                      speakClean(local, null)
+                      return
+                  }
+
+                  val thinking = addBotBubble("Apex думает...", isTemp = true)
+                  val snap = messages.toList()
+                  thread {
+                      val reply = ApexEngine.askAi(snap, img)
+                      runOnUiThread {
+                          chatBox.removeView(thinking)
+                          messages.add("assistant" to reply)
+                          addBotBubble(reply)
+                          saveCurrentChat()
+                          if (voiceText != null) speakClean(reply, null)
+                      }
+                  }
+              }
+
+              private fun addUserBubble(text: String) {
+                  val tv = TextView(this).apply {
+                      this.text = text
+                      setTextColor(Color.WHITE)
+                      textSize = 15f
+                      setPadding(dp(16), dp(11), dp(16), dp(11))
+                      background = GradientDrawable(
+                          GradientDrawable.Orientation.TL_BR,
+                          intArrayOf(Color.parseColor("#1D4ED8"), Color.parseColor("#2563EB"))
+                      ).apply {
+                          cornerRadii = floatArrayOf(dp(20).toFloat(), dp(20).toFloat(), dp(20).toFloat(), dp(20).toFloat(), dp(6).toFloat(), dp(6).toFloat(), dp(20).toFloat(), dp(20).toFloat())
+                      }
+                      layoutParams = LinearLayout.LayoutParams(-2, -2).apply {
+                          gravity = Gravity.END
+                          setMargins(dp(56), dp(6), 0, dp(6))
+                      }
+                  }
+                  chatBox.addView(tv)
+                  chatScroll.post { chatScroll.fullScroll(ScrollView.FOCUS_DOWN) }
+              }
+                            private fun addBotBubble(text: String, isTemp: Boolean = false): LinearLayout {
+                  val wrap = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      setPadding(dp(14), dp(10), dp(12), dp(10))
+                      background = GradientDrawable().apply {
+                          setColor(Color.parseColor("#0D1322"))
+                          cornerRadius = dp(18).toFloat()
+                          setStroke(1, Color.parseColor("#1E293B"))
+                      }
+                      layoutParams = LinearLayout.LayoutParams(-1, -2).apply {
+                          setMargins(0, dp(6), dp(28), dp(6))
+                      }
+                  }
+                  val tv = TextView(this).apply {
+                      this.text = text
+                      setTextColor(if (isTemp) Color.parseColor("#64748B") else Color.parseColor("#E2E8F0"))
+                      textSize = 15f
+                      setLineSpacing(dp(3).toFloat(), 1f)
+                  }
+                  wrap.addView(tv)
+                  if (!isTemp) {
+                      val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(10), 0, 0) }
+                      val copyBtn = TextView(this).apply {
+                          this.text = "Скопировать"
+                          setTextColor(Color.parseColor("#94A3B8"))
+                          textSize = 12f
+                          setOnClickListener {
+                              (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("Apex", text))
+                              Toast.makeText(this@MainActivity, "Скопировано", Toast.LENGTH_SHORT).show()
                           }
                       }
+                      val speakBtn = TextView(this).apply {
+                          this.text = "Озвучить"
+                          setTextColor(Color.parseColor("#38BDF8"))
+                          textSize = 12f
+                          setPadding(dp(20), 0, 0, 0)
+                      }
+                      speakBtn.setOnClickListener {
+                          if (activeSpeakBtn == speakBtn) stopSpeech() else speakClean(text, speakBtn)
+                      }
+                      row.addView(copyBtn); row.addView(speakBtn)
+                      wrap.addView(row)
                   }
-                  return null
+                  chatBox.addView(wrap)
+                  chatScroll.post { chatScroll.fullScroll(ScrollView.FOCUS_DOWN) }
+                  return wrap
               }
 
-              fun askAi(history: List<Pair<String, String>>, imageBase64: String?): String {
-                  return try {
-                      val msgs = JSONArray()
-                      msgs.put(JSONObject().put("role", "system").put("content", "Ты Apex AI — быстрый, умный и дружелюбный голосовой ассистент, созданный Derek Stealth. Отвечай по-русски, чётко, по делу и без смайликов."))
-                      history.takeLast(12).forEach { (role, text) ->
-                          msgs.put(JSONObject().put("role", role).put("content", text))
+              private fun stopSpeech() {
+                  tts?.stop()
+                  resetSpeakBtn()
+              }
+
+              private fun resetSpeakBtn() {
+                  activeSpeakBtn?.text = "Озвучить"
+                  activeSpeakBtn = null
+              }
+
+              private fun speakClean(raw: String, btn: TextView?) {
+                  stopSpeech()
+                  if (btn != null) {
+                      activeSpeakBtn = btn
+                      btn.text = "Стоп"
+                  }
+                  val parts = raw.split(Regex("(?<=[.!?;—])\\s+"))
+                      .map { it.replace(Regex("[^а-яА-ЯёЁa-zA-Z0-9\\s]"), " ").replace(Regex("\\s+"), " ").trim() }
+                      .filter { it.isNotEmpty() }
+                  if (parts.isEmpty()) { resetSpeakBtn(); return }
+                  parts.forEachIndexed { idx, part ->
+                      val mode = if (idx == 0) TextToSpeech.QUEUE_FLUSH else TextToSpeech.QUEUE_ADD
+                      val uid = if (idx == parts.lastIndex) "LAST_SEG" else "SEG_$idx"
+                      tts?.speak(part, mode, null, uid)
+                      if (idx < parts.lastIndex) tts?.playSilentUtterance(240L, TextToSpeech.QUEUE_ADD, "PAUSE_$idx")
+                  }
+              }
+                            private fun toggleVoice() {
+                  if (isListening) {
+                      isListening = false
+                      recognizer?.stopListening()
+                      micBtn.setColorFilter(Color.parseColor("#38BDF8"))
+                      return
+                  }
+                  stopSpeech()
+                  isListening = true
+                  micBtn.setColorFilter(Color.parseColor("#EF4444"))
+                  recognizer?.destroy()
+                  recognizer = SpeechRecognizer.createSpeechRecognizer(this).apply {
+                      setRecognitionListener(object : RecognitionListener {
+                          override fun onReadyForSpeech(p: Bundle?) {}
+                          override fun onBeginningOfSpeech() {}
+                          override fun onRmsChanged(v: Float) {}
+                          override fun onBufferReceived(b: ByteArray?) {}
+                          override fun onEndOfSpeech() { isListening = false; micBtn.setColorFilter(Color.parseColor("#38BDF8")) }
+                          override fun onError(err: Int) { isListening = false; micBtn.setColorFilter(Color.parseColor("#38BDF8")) }
+                          override fun onPartialResults(p: Bundle?) {}
+                          override fun onEvent(t: Int, p: Bundle?) {}
+                          override fun onResults(res: Bundle?) {
+                              isListening = false
+                              micBtn.setColorFilter(Color.parseColor("#38BDF8"))
+                              val said = res?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
+                              if (!said.isNullOrBlank()) sendMessage(said)
+                          }
+                      })
+                  }
+                  val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                      putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                      putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
+                      putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 60000L)
+                  }
+                  recognizer?.startListening(intent)
+              }
+
+              private fun saveCurrentChat() {
+                  if (messages.isEmpty()) return
+                  val prefs = getSharedPreferences("apex_chats", Context.MODE_PRIVATE)
+                  val all = JSONObject(prefs.getString("data", "{}") ?: "{}")
+                  val arr = JSONArray()
+                  messages.forEach { (r, t) -> arr.put(JSONObject().put("r", r).put("t", t)) }
+                  all.put(currentChatId, JSONObject().put("title", messages.first().second.take(34)).put("msgs", arr))
+                  prefs.edit().putString("data", all.toString()).apply()
+                  refreshHistoryUI()
+              }
+
+              private fun refreshHistoryUI() {
+                  historyList.removeAllViews()
+                  val prefs = getSharedPreferences("apex_chats", Context.MODE_PRIVATE)
+                  val all = JSONObject(prefs.getString("data", "{}") ?: "{}")
+                  val keys = all.keys()
+                  val ids = mutableListOf<String>()
+                  while (keys.hasNext()) ids.add(keys.next())
+                  ids.reversed().forEach { id ->
+                      val obj = all.optJSONObject(id) ?: return@forEach
+                      val item = TextView(this).apply {
+                          text = obj.optString("title", "Диалог")
+                          setTextColor(Color.parseColor("#CBD5E1"))
+                          textSize = 13f
+                          maxLines = 1
+                          setPadding(dp(10), dp(10), dp(10), dp(10))
+                          setOnClickListener {
+                              currentChatId = id
+                              messages.clear()
+                              chatBox.removeAllViews()
+                              centerHero.visibility = View.GONE
+                              chatScroll.visibility = View.VISIBLE
+                              val arr = obj.optJSONArray("msgs") ?: JSONArray()
+                              for (i in 0 until arr.length()) {
+                                  val m = arr.getJSONObject(i)
+                                  val r = m.getString("r")
+                                  val t = m.getString("t")
+                                  messages.add(r to t)
+                                  if (r == "user") addUserBubble(t) else addBotBubble(t)
+                              }
+                              drawer.closeDrawers()
+                          }
                       }
-                      if (imageBase64 != null) {
-                          val lastIdx = msgs.length() - 1
-                          val lastText = msgs.getJSONObject(lastIdx).getString("content")
-                          val parts = JSONArray()
-                              .put(JSONObject().put("type", "text").put("text", lastText.ifBlank { "Подробно опиши, что изображено на этом фото." }))
-                              .put(JSONObject().put("type", "image_url").put("image_url", JSONObject().put("url", "data:image/jpeg;base64,$imageBase64")))
-                          msgs.getJSONObject(lastIdx).put("content", parts)
+                      historyList.addView(item)
+                  }
+              }
+                            private fun showRatingDialog() {
+                  val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(24), dp(16), dp(24), dp(8)) }
+                  var selectedStars = 5
+                  val starsRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+                  val starViews = mutableListOf<TextView>()
+                  for (i in 1..5) {
+                      val sv = TextView(this).apply {
+                          text = "★"
+                          textSize = 32f
+                          setTextColor(Color.parseColor("#FBBF24"))
+                          setPadding(dp(6), 0, dp(6), dp(10))
+                          setOnClickListener {
+                              selectedStars = i
+                              starViews.forEachIndexed { idx, v -> v.setTextColor(Color.parseColor(if (idx < i) "#FBBF24" else "#475569")) }
+                          }
                       }
-                      val payload = JSONObject()
-                          .put("model", if (imageBase64 != null) "openai" else "openai-fast")
-                          .put("messages", msgs)
-                      val c = URL(AI_URL).openConnection() as HttpURLConnection
-                      c.requestMethod = "POST"
-                      c.setRequestProperty("Content-Type", "application/json")
-                      c.connectTimeout = 10000
-                      c.readTimeout = 25000
-                      c.doOutput = true
-                      OutputStreamWriter(c.outputStream).use { it.write(payload.toString()) }
-                      val code = c.responseCode
-                      val raw = (if (code in 200..299) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText() } ?: ""
-                      if (code in 200..299 && raw.trim().startsWith("{")) {
-                          JSONObject(raw).getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim()
-                      } else "Ошибка сервера ($code). Попробуйте ещё раз."
-                  } catch (e: Exception) {
-                      "Нет связи с сервером: ${e.localizedMessage ?: "таймаут"}"
+                      starViews.add(sv); starsRow.add(sv)
+                  }
+                  val commentEt = EditText(this).apply { hint = "Ваш отзыв (необязательно)" }
+                  box.addView(starsRow); box.addView(commentEt)
+                  AlertDialog.Builder(this)
+                      .setTitle("Оценить Apex AI")
+                      .setView(box)
+                      .setPositiveButton("Отправить") { _, _ ->
+                          val comment = commentEt.text.toString()
+                          val device = "${Build.MANUFACTURER} ${Build.MODEL}"
+                          thread {
+                              val ok = ApexEngine.sendRating(selectedStars, comment, device)
+                              runOnUiThread {
+                                  Toast.makeText(this, if (ok) "Спасибо! Оценка отправлена." else "Ошибка сети", Toast.LENGTH_SHORT).show()
+                              }
+                          }
+                      }
+                      .setNegativeButton("Отмена", null)
+                      .show()
+              }
+
+              override fun onDestroy() {
+                  tts?.shutdown()
+                  recognizer?.destroy()
+                  super.onDestroy()
+              }
+
+              class StarfieldView(ctx: Context) : View(ctx) {
+                  private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+                  private val stars = List(65) { Triple(Random.nextFloat(), Random.nextFloat(), Random.nextFloat() * 2.2f + 0.8f) }
+                  override fun onDraw(canvas: Canvas) {
+                      stars.forEachIndexed { i, (rx, ry, r) ->
+                          paint.alpha = 40 + ((sin(System.currentTimeMillis() / 700.0 + i) + 1.0) * 65).toInt()
+                          canvas.drawCircle(rx * width, ry * height, r, paint)
+                      }
+                      postInvalidateDelayed(80)
+                  }
+              }
+                            class ApexOrbView(ctx: Context) : View(ctx) {
+                  private var angle = 0f
+                  private val corePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+                  private val arcPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                      style = Paint.Style.STROKE
+                      strokeWidth = 5f
+                      strokeCap = Paint.Cap.ROUND
+                  }
+                  private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                      color = Color.WHITE
+                      textAlign = Paint.Align.CENTER
+                      typeface = Typeface.DEFAULT_BOLD
+                  }
+                  init {
+                      ValueAnimator.ofFloat(0f, 360f).apply {
+                          duration = 7000
+                          repeatCount = ValueAnimator.INFINITE
+                          interpolator = LinearInterpolator()
+                          addUpdateListener { angle = it.animatedValue as Float; invalidate() }
+                          start()
+                      }
+                  }
+                  override fun onDraw(canvas: Canvas) {
+                      val cx = width / 2f
+                      val cy = height / 2f
+                      val r = width * 0.34f
+                      corePaint.shader = RadialGradient(cx, cy, r * 1.4f, intArrayOf(Color.parseColor("#1E3A8A"), Color.parseColor("#0B1120"), Color.TRANSPARENT), null, Shader.TileMode.CLAMP)
+                      canvas.drawCircle(cx, cy, r * 1.4f, corePaint)
+
+                      val rect1 = RectF(cx - r * 1.15f, cy - r * 1.15f, cx + r * 1.15f, cy + r * 1.15f)
+                      arcPaint.color = Color.parseColor("#38BDF8")
+                      canvas.drawArc(rect1, angle, 110f, false, arcPaint)
+                      canvas.drawArc(rect1, angle + 180f, 90f, false, arcPaint)
+
+                      val rect2 = RectF(cx - r * 0.92f, cy - r * 0.92f, cx + r * 0.92f, cy + r * 0.92f)
+                      arcPaint.color = Color.parseColor("#818CF8")
+                      canvas.drawArc(rect2, -angle * 1.3f, 130f, false, arcPaint)
+
+                      textPaint.textSize = r * 0.95f
+                      canvas.drawText("A", cx, cy + textPaint.textSize * 0.34f, textPaint)
                   }
               }
 
-              fun sendRating(stars: Int, comment: String, device: String): Boolean {
-                  val tok = BuildConfig.TG_BOT_TOKEN
-                  if (tok.isBlank()) return false
-                  return try {
-                      val text = "ОЦЕНКА ИЗ APEX AI 4.0\n\nОценка: ${"⭐".repeat(stars)} ($stars/5)\nУстройство: $device\nОтзыв: ${comment.ifBlank { "Без текста" }}"
-                      val body = JSONObject().put("chat_id", ADMIN_ID).put("text", text)
-                      val c = URL("https://api.telegram.org/bot$tok/sendMessage").openConnection() as HttpURLConnection
-                      c.requestMethod = "POST"
-                      c.setRequestProperty("Content-Type", "application/json")
-                      c.connectTimeout = 8000
-                      c.doOutput = true
-                      OutputStreamWriter(c.outputStream).use { it.write(body.toString()) }
-                      c.responseCode in 200..299
-                  } catch (_: Exception) { false }
+              class RainbowCapsuleLayout(ctx: Context) : FrameLayout(ctx) {
+                  private var phase = 0f
+                  private val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+                  init {
+                      setPadding(4, 4, 4, 4)
+                      setWillNotDraw(false)
+                      ValueAnimator.ofFloat(0f, 360f).apply {
+                          duration = 5000
+                          repeatCount = ValueAnimator.INFINITE
+                          interpolator = LinearInterpolator()
+                          addUpdateListener { phase = it.animatedValue as Float; invalidate() }
+                          start()
+                      }
+                  }
+                  override fun onDraw(canvas: Canvas) {
+                      val matrix = Matrix().apply { postRotate(phase, width / 2f, height / 2f) }
+                      val shader = SweepGradient(width / 2f, height / 2f, intArrayOf(
+                          Color.parseColor("#38BDF8"),
+                          Color.parseColor("#818CF8"),
+                          Color.parseColor("#C084FC"),
+                          Color.parseColor("#38BDF8")
+                      ), null).apply { setLocalMatrix(matrix) }
+                      borderPaint.shader = shader
+                      val rad = 28f * resources.displayMetrics.density
+                      canvas.drawRoundRect(RectF(0f, 0f, width.toFloat(), height.toFloat()), rad, rad, borderPaint)
+                      super.onDraw(canvas)
+                  }
               }
           }
           EOF
 
-          git add app
-          git commit -m "Step 1: Add clean app config and ApexEngine.kt" || true
+          tar -czf vault.tar.gz app build.gradle.kts settings.gradle.kts gradle.properties
+          openssl enc -aes-256-cbc -pbkdf2 -salt -in vault.tar.gz -out apex_vault.enc -pass env:VAULT_PASS
+          rm -f vault.tar.gz
+
+          git config user.name "ApexBot"
+          git config user.email "bot@apex.local"
+          git rm -rf --ignore-unmatch app build.gradle.kts settings.gradle.kts gradle.properties
+          git add apex_vault.enc
+          git commit -m "Release Apex AI 4.0 encrypted vault" || true
           git push || true
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.2.1'
+
+      - run: gradle assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Apex-AI-4.0-Secure
+          path: app/build/outputs/apk/debug/app-debug.apk
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v4.0.${{ github.run_number }}
+          files: app/build/outputs/apk/debug/app-debug.apk
           
