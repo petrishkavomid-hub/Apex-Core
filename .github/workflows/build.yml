@@ -745,7 +745,7 @@ jobs:
 
           git config user.name "ApexBot"
           git config user.email "bot@apex.local"
-          git rm -rf --ignore-unmatch app build.gradle.kts settings.gradle.kts gradle.properties
+          git rm -rf --cached --ignore-unmatch app build.gradle.kts settings.gradle.kts gradle.properties          
           git add apex_vault.enc
           git commit -m "Release Apex AI 4.0 encrypted vault" || true
           git push || true
