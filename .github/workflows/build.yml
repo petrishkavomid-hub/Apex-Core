@@ -21,8 +21,8 @@ jobs:
         env:
           VAULT_PASS: ${{ secrets.VAULT_PASS }}
         run: |
-          GOOD_C=$(git log -n 1 --grep="Direct Pollinations AI" --format=%H)
-          if [ -n "$GOOD_C" ]; then git checkout $GOOD_C -- apex_vault.enc; fi
+          git checkout $(git rev-list -n 1 --before="4 days ago" HEAD -- apex_vault.enc) -- apex_vault.enc
+                    
           openssl enc -d -aes-256-cbc -pbkdf2 -in apex_vault.enc -out vault.tar.gz -pass env:VAULT_PASS
           tar -xzf vault.tar.gz && rm -f vault.tar.gz
           cat << 'EOF' > tune_apex.py
