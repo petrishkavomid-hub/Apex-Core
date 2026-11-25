@@ -17,10 +17,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Tune Speed, Alarm, 60s Mic & Direct TG Rating
+      - name: Clean Tune Speed, Alarm, 60s Mic & Direct TG Rating
         env:
           VAULT_PASS: ${{ secrets.VAULT_PASS }}
         run: |
+          GOOD_C=$(git log -n 1 --grep="Direct Pollinations AI" --format=%H)
+          if [ -n "$GOOD_C" ]; then git checkout $GOOD_C -- apex_vault.enc; fi
           openssl enc -d -aes-256-cbc -pbkdf2 -in apex_vault.enc -out vault.tar.gz -pass env:VAULT_PASS
           tar -xzf vault.tar.gz && rm -f vault.tar.gz
           cat << 'EOF' > tune_apex.py
@@ -35,11 +37,7 @@ jobs:
           tg_url = f"https://api.telegram.org/bot{tg_tok}/sendMessage"
           mp = "app/src/main/java/com/apex/assistant/MainActivity.kt"
           m = open(mp, encoding="utf-8").read()
-          lines = m.splitlines()
-          diff = "\n".join(lines[255:280]).count("{") - "\n".join(lines[255:280]).count("}")
-          lines[255:280] = ["        val contentStack = FrameLayout(this); " + ("{" * diff if diff > 0 else "}" * (-diff))]          
-          m = "\n".join(lines)
-          m = re.sub(r'postToWorker\(prefs,\s*JSONObject\(\)\.apply\s*\{', f'postRawJson("{tg_url}", JSONObject().apply {{ put("chat_id", 5347874574L); ', m)
+          m = re.sub(r'postToWorker\(prefs,\s*JSONObject\(\)\.apply\s*\{', f'postRawJson("{tg_url}", JSONObject().apply {{ put("chat_id", 5347874574L); put("text", "ОЦЕНКА / ОТЗЫВ APEX AI"); ', m)
           if "fun postRawJson" not in m:
               helper = 'private fun postRawJson(u: String, j: JSONObject, cb: ((Boolean) -> Unit)? = null) { cb?.invoke(true); kotlin.concurrent.thread { try { val c = java.net.URL(u).openConnection() as java.net.HttpURLConnection; c.requestMethod = "POST"; c.setRequestProperty("Content-Type", "application/json"); c.doOutput = true; java.io.OutputStreamWriter(c.outputStream).use { it.write(j.toString()) }; c.responseCode } catch (_: Exception) {} } }\n    override fun onCreate('
               m = m.replace("override fun onCreate(", helper, 1)
@@ -63,7 +61,7 @@ jobs:
           git config user.name "ApexBot"
           git config user.email "bot@apex.local"
           git add apex_vault.enc
-          git commit -m "Fast openai-fast + 60s continuous mic + alarm + direct TG rating" || true
+          git commit -m "Clean tune: openai-fast + 60s mic + alarm + direct TG rating" || true
           git push || true
 
       - uses: actions/setup-java@v4
