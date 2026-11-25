@@ -23,7 +23,8 @@ jobs:
           cp src/AndroidManifest.xml app/src/main/
           IMG=$(find . -maxdepth 1 -type f \( -iname "*.png" -o -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.webp" \) | head -n 1)
           if [ -n "$IMG" ]; then
-            convert "$IMG" -gravity center -extent 1:1 -resize 512x512 PNG32:app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+            cp "$IMG" app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+                        
             cp app/src/main/res/mipmap-xxxhdpi/ic_launcher.png app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png
             cp app/src/main/res/mipmap-xxxhdpi/ic_launcher.png app/src/main/res/drawable/brand_logo.png
           fi
