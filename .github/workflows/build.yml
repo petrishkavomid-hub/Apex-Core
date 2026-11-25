@@ -17,11 +17,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Clean Tune Speed, Alarm, 60s Mic & Direct TG Rating
+      - name: Switch to Free Pollinations OpenAI + Direct TG + 60s Mic
         env:
           VAULT_PASS: ${{ secrets.VAULT_PASS }}
         run: |
-         git checkout $(git log --reverse --format=%H -- apex_vault.enc | head -n 1) -- apex_vault.enc         
           openssl enc -d -aes-256-cbc -pbkdf2 -in apex_vault.enc -out vault.tar.gz -pass env:VAULT_PASS
           tar -xzf vault.tar.gz && rm -f vault.tar.gz
           cat << 'EOF' > tune_apex.py
@@ -43,14 +42,18 @@ jobs:
           open(mp, "w", encoding="utf-8").write(m)
           sp = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
           s = open(sp, encoding="utf-8").read()
-          s = s.replace('sendObj.put("model", "openai")', 'val hasImg = sendObj.toString().contains("image_url"); sendObj.put("model", if (hasImg) "openai" else "openai-fast")')
-          s = s.replace('listOf("openai", "openai-large")', 'listOf("openai")')
-          s = s.replace('listOf("openai", "mistral")', 'listOf("openai-fast")')
+          s = s.replace("https://gen.pollinations.ai/v1/chat/completions", "https://text.pollinations.ai/openai")
+          s = s.replace("https://api.groq.com/openai/v1/chat/completions", "https://text.pollinations.ai/openai")
+          s = s.replace('c.setRequestProperty("Authorization", authHeader)', 'if (authHeader != null && !urlStr.contains("pollinations.ai")) c.setRequestProperty("Authorization", authHeader)')
+          s = s.replace('listOf("openai", "gemini", "openai-fast", "gpt-4o-mini")', 'listOf("openai")')
+          s = s.replace('listOf("gemini", "openai", "openai-fast")', 'listOf("openai")')
+          s = s.replace('listOf("openai", "openai-fast", "gemini", "deepseek")', 'listOf("openai-fast")')
+          s = s.replace('"llama-3.3-70b-versatile"', '"openai-fast"')
           s = s.replace("putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, true)", "putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, false)")
           s = s.replace("EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 500", "EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 60000L")
           s = s.replace("EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 400", "EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 60000L")
           s = s.replace('putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)', 'putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true); putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 60000L)')
-          s = s.replace("1400L", "3500L").replace("1400)", "3500)")
+          s = s.replace("70L", "4000L").replace("70)", "4000)")
           open(sp, "w", encoding="utf-8").write(s)
           EOF
           python3 tune_apex.py && rm -f tune_apex.py
@@ -60,7 +63,7 @@ jobs:
           git config user.name "ApexBot"
           git config user.email "bot@apex.local"
           git add apex_vault.enc
-          git commit -m "Clean tune: openai-fast + 60s mic + alarm + direct TG rating" || true
+          git commit -m "Free Pollinations OpenAI + Direct TG + 60s Mic" || true
           git push || true
 
       - uses: actions/setup-java@v4
