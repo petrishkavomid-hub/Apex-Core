@@ -20,7 +20,7 @@ jobs:
           cp src/ApexEngine.kt src/MainActivity.kt app/src/main/java/com/apex/assistant/
           IMG=$(find . -maxdepth 1 -type f \( -iname "*.png" -o -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.webp" \) | head -n 1)
           if [ -n "$IMG" ]; then
-            python3 -c "from PIL import Image; im=Image.open('$IMG').convert('RGBA'); s=min(im.size); im=im.crop(((im.width-s)//2,(im.height-s)//2,(im.width+s)//2,(im.height+s)//2)).resize((512,512)); im.save('app/src/main/res/mipmap-xxxhdpi/ic_launcher.png'); im.save('app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png'); im.save('app/src/main/res/drawable/brand_logo.png')"
+          convert "$IMG" -gravity center -extent 1:1 -resize 512x512 PNG32:app/src/main/res/mipmap-xxxhdpi/ic_launcher.png && cp app/src/main/res/mipmap-xxxhdpi/ic_launcher.png app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.png && cp app/src/main/res/mipmap-xxxhdpi/ic_launcher.png app/src/main/res/drawable/brand_logo.png
           fi
           printf 'pluginManagement{repositories{google();mavenCentral();gradlePluginPortal()}}\ndependencyResolutionManagement{repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS);repositories{google();mavenCentral()}}\nrootProject.name="ApexAI"\ninclude(":app")\n' > settings.gradle.kts
           printf 'plugins{id("com.android.application") version "8.2.2" apply false;id("org.jetbrains.kotlin.android") version "1.9.22" apply false}\n' > build.gradle.kts
