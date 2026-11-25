@@ -1580,10 +1580,10 @@ jobs:
         with:
           gradle-version: '8.2.1'
 
-      - run: gradle assembleDebug --no-daemon
+      - run: nl -ba app/src/main/java/com/apex/assistant/MainActivity.kt | sed -n '735,750p' && gradle assembleDebug --no-daemon
+      
         env:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-
       - uses: actions/upload-artifact@v4
         with:
           name: Apex-AI-4.0-Release
