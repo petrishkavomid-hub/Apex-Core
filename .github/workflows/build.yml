@@ -1,4 +1,4 @@
-name: Build Apex AI Secure
+name: Clean Repo Structure
 
 on:
   push:
@@ -9,82 +9,16 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  clean:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Switch to Free Pollinations OpenAI + Direct TG + 60s Mic
-        env:
-          VAULT_PASS: ${{ secrets.VAULT_PASS }}
+      - name: Remove Old Patch Files
         run: |
-         git checkout $(git log --reverse --format=%H -- apex_vault.enc | head -n 1) -- apex_vault.enc
-                    
-          tar -xzf vault.tar.gz && rm -f vault.tar.gz
-          cat << 'EOF' > tune_apex.py
-          import re, os
-          man_p = "app/src/main/AndroidManifest.xml"
-          if os.path.exists(man_p):
-              man = open(man_p, encoding="utf-8").read()
-              if "SET_ALARM" not in man:
-                  man = man.replace("<application", '<uses-permission android:name="com.android.alarm.permission.SET_ALARM" />\n    <application', 1)
-              open(man_p, "w", encoding="utf-8").write(man)
-          tg_tok = "8813383592:AAEq3jtBj3G9qeSr3KRSvUhOEFpmCHYfuog"
-          tg_url = f"https://api.telegram.org/bot{tg_tok}/sendMessage"
-          mp = "app/src/main/java/com/apex/assistant/MainActivity.kt"
-          m = open(mp, encoding="utf-8").read()
-          m = re.sub(r'postToWorker\(prefs,\s*JSONObject\(\)\.apply\s*\{', f'postRawJson("{tg_url}", JSONObject().apply {{ put("chat_id", 5347874574L); put("text", "ОЦЕНКА / ОТЗЫВ APEX AI"); ', m)
-          if "fun postRawJson" not in m:
-              helper = 'private fun postRawJson(u: String, j: JSONObject, cb: ((Boolean) -> Unit)? = null) { cb?.invoke(true); kotlin.concurrent.thread { try { val c = java.net.URL(u).openConnection() as java.net.HttpURLConnection; c.requestMethod = "POST"; c.setRequestProperty("Content-Type", "application/json"); c.doOutput = true; java.io.OutputStreamWriter(c.outputStream).use { it.write(j.toString()) }; c.responseCode } catch (_: Exception) {} } }\n    override fun onCreate('
-              m = m.replace("override fun onCreate(", helper, 1)
-          open(mp, "w", encoding="utf-8").write(m)
-          sp = "app/src/main/java/com/apex/assistant/ApexCoreService.kt"
-          s = open(sp, encoding="utf-8").read()
-          s = s.replace("https://gen.pollinations.ai/v1/chat/completions", "https://text.pollinations.ai/openai")
-          s = s.replace("https://api.groq.com/openai/v1/chat/completions", "https://text.pollinations.ai/openai")
-          s = s.replace('c.setRequestProperty("Authorization", authHeader)', 'if (authHeader != null && !urlStr.contains("pollinations.ai")) c.setRequestProperty("Authorization", authHeader)')
-          s = s.replace('listOf("openai", "gemini", "openai-fast", "gpt-4o-mini")', 'listOf("openai")')
-          s = s.replace('listOf("gemini", "openai", "openai-fast")', 'listOf("openai")')
-          s = s.replace('listOf("openai", "openai-fast", "gemini", "deepseek")', 'listOf("openai-fast")')
-          s = s.replace('"llama-3.3-70b-versatile"', '"openai-fast"')
-          s = s.replace("putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, true)", "putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, false)")
-          s = s.replace("EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 500", "EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 60000L")
-          s = s.replace("EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 400", "EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 60000L")
-          s = s.replace('putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)', 'putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true); putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 60000L)')
-          s = s.replace("70L", "4000L").replace("70)", "4000)")
-          open(sp, "w", encoding="utf-8").write(s)
-          EOF
-          python3 tune_apex.py && rm -f tune_apex.py
-          tar -czf vault.tar.gz app build.gradle* settings.gradle* gradle*
-          openssl enc -aes-256-cbc -pbkdf2 -salt -in vault.tar.gz -out apex_vault.enc -pass env:VAULT_PASS
-          rm -f vault.tar.gz
           git config user.name "ApexBot"
           git config user.email "bot@apex.local"
-          git add apex_vault.enc
-          git commit -m "Free Pollinations OpenAI + Direct TG + 60s Mic" || true
+          git rm -rf --ignore-unmatch apex_vault.enc bot.py build_patch.py fbe20faddd611f1b664da40* final_fix.py fix_all.py polish_apex.py push.json update_code.py worker.js app src
+          git commit -m "Clean old patch files and prepare fresh architecture" || true
           git push || true
-
-      - uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.2.1'
-
-      - run: gradle assembleDebug --no-daemon
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Apex-AI-Secure
-          path: app/build/outputs/apk/debug/app-debug.apk
-
-      - uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v2.0.${{ github.run_number }}
-          files: app/build/outputs/apk/debug/app-debug.apk
           
