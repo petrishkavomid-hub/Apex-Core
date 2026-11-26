@@ -20,7 +20,11 @@ jobs:
           VAULT_PASS: ${{ secrets.VAULT_PASS }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
         run: |
-          mkdir -p app/src/main/java/com/apex/assistant app/src/main/res/drawable app/src/main/res/mipmap-anydpi-v26
+          mkdir -p app/src/main/java/com/apex/assistant app/src/main/res/drawable app/src/main/res/mipmap-xxxhdpi
+          cp IMG_20261126_121336_019.jpg app/src/main/res/mipmap-xxxhdpi/ic_launcher.jpg
+          cp IMG_20261126_121336_019.jpg app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.jpg
+          cp IMG_20261126_121336_019.jpg app/src/main/res/drawable/apex_center_logo.jpg
+          
           cat << 'EOF' > settings.gradle.kts
           pluginManagement {
               repositories { google(); mavenCentral(); gradlePluginPortal() }
@@ -73,66 +77,7 @@ jobs:
           }
           EOF
 
-          cat << 'EOF' > app/src/main/res/drawable/ic_launcher_bg.xml
-          <vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-              <path android:pathData="M0,0h108v108h-108z">
-                  <aapt:attr name="android:fillColor">
-                      <gradient android:startX="54" android:startY="0" android:endX="54" android:endY="108" android:type="linear">
-                          <item android:offset="0" android:color="#02050C"/>
-                          <item android:offset="0.6" android:color="#050D1F"/>
-                          <item android:offset="1" android:color="#0A1D42"/>
-                      </gradient>
-                  </aapt:attr>
-              </path>
-          </vector>
-          EOF
-
-          cat << 'EOF' > app/src/main/res/drawable/ic_launcher_fg.xml
-          <vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
-              <path android:pathData="M54,24 L30,74 L43,74 L54,48 Z">
-                  <aapt:attr name="android:fillColor">
-                      <gradient android:startX="54" android:startY="24" android:endX="30" android:endY="74" android:type="linear">
-                          <item android:offset="0" android:color="#38BDF8"/>
-                          <item android:offset="1" android:color="#1D4ED8"/>
-                      </gradient>
-                  </aapt:attr>
-              </path>
-              <path android:pathData="M54,24 L78,74 L65,74 L54,48 Z">
-                  <aapt:attr name="android:fillColor">
-                      <gradient android:startX="54" android:startY="24" android:endX="78" android:endY="74" android:type="linear">
-                          <item android:offset="0" android:color="#7DD3FC"/>
-                          <item android:offset="1" android:color="#2563EB"/>
-                      </gradient>
-                  </aapt:attr>
-              </path>
-              <path android:fillColor="#0284C7" android:pathData="M54,53 L64,65 L49,61 Z"/>
-              <path android:pathData="M26,77 Q54,75 82,77 Q54,80 26,77 Z">
-                  <aapt:attr name="android:fillColor">
-                      <gradient android:startX="26" android:startY="77" android:endX="82" android:endY="77" android:type="linear">
-                          <item android:offset="0" android:color="#0038BDF8"/>
-                          <item android:offset="0.5" android:color="#E0F2FE"/>
-                          <item android:offset="1" android:color="#0038BDF8"/>
-                      </gradient>
-                  </aapt:attr>
-              </path>
-          </vector>
-          EOF
-
-          cat << 'EOF' > app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml
-          <?xml version="1.0" encoding="utf-8"?>
-          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-              <background android:drawable="@drawable/ic_launcher_bg"/>
-              <foreground android:drawable="@drawable/ic_launcher_fg"/>
-          </adaptive-icon>
-          EOF
-
-          cat << 'EOF' > app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml
-          <?xml version="1.0" encoding="utf-8"?>
-          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-              <background android:drawable="@drawable/ic_launcher_bg"/>
-              <foreground android:drawable="@drawable/ic_launcher_fg"/>
-          </adaptive-icon>
-          EOF
+       
 
           cat << 'EOF' > app/src/main/AndroidManifest.xml
           <?xml version="1.0" encoding="utf-8"?>
@@ -774,7 +719,8 @@ jobs:
                   }
                   val desc = TextView(this).apply {
                       text = if (isUnsubscribed) {
-                          "Вы отписались от Telegram-канала @Apexassistantcore.\nДля продолжения бесплатного использования подпишитесь обратно и нажмите «Проверить подписку»."
+                      "Вы отписались от нашего Telegram-канала. Чтобы продолжить пользоваться Apex AI, подпишитесь обратно и нажмите кнопку проверки ниже."
+                                                    
                       } else {
                           "Для бесплатного использования приложения подпишитесь на наш официальный Telegram-канал @Apexassistantcore, укажите ваш @username или Telegram ID и нажмите «Проверить подписку»."
                       }
@@ -783,19 +729,9 @@ jobs:
                       gravity = Gravity.CENTER
                       setPadding(0, dp(12), 0, dp(16))
                   }
-                  val userEt = EditText(this).apply {
-                      hint = "Ваш @username или Telegram ID"
-                      setText(prefs.getString("tg_user", ""))
-                      setTextColor(Color.WHITE)
-                      setHintTextColor(Color.parseColor("#64748B"))
-                      textSize = 14f
-                      setPadding(dp(14), dp(12), dp(14), dp(12))
-                      background = GradientDrawable().apply {
-                          setColor(Color.parseColor("#111827"))
-                          cornerRadius = dp(12).toFloat()
-                          setStroke(1, Color.parseColor("#334155"))
-                      }
-                  }
+                
+                      
+                  
                   val statusTv = TextView(this).apply {
                       setTextColor(Color.parseColor("#F87171"))
                       textSize = 12f
@@ -803,7 +739,8 @@ jobs:
                       setPadding(0, dp(8), 0, dp(8))
                   }
                   val subBtn = TextView(this).apply {
-                      text = "1. Подписаться на @Apexassistantcore"
+                      text = "1. Подписаться на Telegram-канал"
+                                            
                       setTextColor(Color.WHITE)
                       textSize = 14f
                       setTypeface(null, Typeface.BOLD)
@@ -825,32 +762,19 @@ jobs:
                       background = GradientDrawable().apply { setColor(Color.parseColor("#1D4ED8")); cornerRadius = dp(14).toFloat() }
                       layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) }
                   }
-                  box.addView(title); box.addView(desc); box.addView(userEt); box.addView(statusTv); box.addView(subBtn); box.addView(checkBtn)
+                      box.addView(title); box.addView(desc); box.addView(statusTv); box.addView(subBtn); box.addView(checkBtn)
+                                    
 
                   val dlg = AlertDialog.Builder(this).setView(box).setCancelable(false).create()
-                  dlg.window?.setBackgroundDrawableResource(android.R.color.transparent)
-                  checkBtn.setOnClickListener {
-                      val u = userEt.text.toString().trim()
-                      if (u.isEmpty()) {
-                          statusTv.text = "Введите ваш @username или Telegram ID"
-                          return@setOnClickListener
-                      }
-                      statusTv.setTextColor(Color.parseColor("#38BDF8"))
-                      statusTv.text = "Проверяем подписку..."
-                      thread {
-                          val (ok, msg) = ApexEngine.checkSubscription(u)
-                          runOnUiThread {
-                              if (ok) {
-                                  prefs.edit().putString("tg_user", u).apply()
-                                  dlg.dismiss()
-                                  Toast.makeText(this, "Доступ открыт!", Toast.LENGTH_SHORT).show()
-                              } else {
-                                  statusTv.setTextColor(Color.parseColor("#F87171"))
-                                  statusTv.text = msg
-                              }
-                          }
-                      }
+                      checkBtn.setOnClickListener {
+                      prefs.edit().putString("tg_user", "member").apply()
+                      dlg.dismiss()
+                      Toast.makeText(this, "Доступ открыт!", Toast.LENGTH_SHORT).show()
                   }
+                  
+                          
+                      
+                  
                   dlg.show()
               }
                             private fun showPermissionsDialog() {
@@ -955,17 +879,21 @@ jobs:
                       }
                   }
                   val title = TextView(this).apply {
-                      text = "⚡  Команды и возможности"
+                      text = "⚡ Команды и возможности Apex AI"
+                                            
                       setTextColor(Color.WHITE)
                       textSize = 18f
                       setTypeface(null, Typeface.BOLD)
                       setPadding(0, 0, 0, dp(10))
                   }
-                  val body = TextView(this).apply {
+                      text = "Apex AI — это не просто голосовой помощник с набором стандартных команд. Это многофункциональный ИИ-ассистент, который помогает управлять устройством, выполнять повседневные задачи и взаимодействовать с приложениями.\n\nЧто умеет Apex AI\n\n• Управление устройством: включение и выключение фонарика, открытие настроек, камеры, браузера, карт и других системных разделов.\n• Запуск приложений: открывает приложения, установленные на вашем устройстве. Достаточно назвать нужное приложение — Apex выполнит команду.\n• Будильники и напоминания: устанавливает будильники, создаёт напоминания о важных делах и событиях.\n• Заметки: помогает создавать и сохранять заметки, чтобы информация всегда была под рукой.\n• Таймеры: устанавливает таймеры на нужное время.\n• Анализ изображений: отправьте фотографию через кнопку «+», чтобы Apex мог изучить её и ответить на ваши вопросы.\n• Умный диалог: отвечает на вопросы, помогает разбираться в сложных темах, искать решения и выполнять различные задачи.\n\nИ это далеко не всё!\n\nПеречисленные команды — лишь малая часть возможностей Apex AI. Ассистент постоянно развивается, а его функциональность не ограничивается этим списком. Вы можете общаться с ним обычным языком, формулировать собственные запросы и использовать его для самых разных повседневных задач.\n\nApex AI — больше, чем просто команды. Это ваш персональный интеллектуальный помощник."
+                                        
                       text = "• Фонарик: «Включи фонарик», «Выключи»\n• Будильник: «Поставь будильник на 08:30»\n• Таймер: «Поставь таймер на 10 минут»\n• Приложения: «Открой Ютуб / Телеграм / Ватсап / ВК / Настройки / Камеру / Браузер / Карты»\n• Анализ фото: нажмите «+» и прикрепите снимок\n• Умный диалог: любые вопросы и задачи"
                       setTextColor(Color.parseColor("#CBD5E1"))
                       textSize = 13f
-                      setLineSpacing(dp(4).toFloat(), 1f)
+                      box.addView(title)
+                  box.addView(ScrollView(this).apply { addView(body); layoutParams = LinearLayout.LayoutParams(-1, dp(320)) })
+                  
                   }
                   box.addView(title); box.addView(body)
                   val dlg = AlertDialog.Builder(this).setView(box).create()
@@ -1013,7 +941,8 @@ jobs:
                   dlg.window?.setBackgroundDrawableResource(android.R.color.transparent)
 
                   val tgBtn = TextView(this).apply {
-                      text = "Открыть канал @Apexassistantcore"
+                      text = "Открыть Telegram-канал"
+                      
                       setTextColor(Color.WHITE)
                       textSize = 14f
                       setTypeface(null, Typeface.BOLD)
@@ -1468,73 +1397,67 @@ jobs:
                   }
               }
 
-              class ApexOrbView(ctx: Context) : View(ctx) {
-                  private var angle = 0f
+                  class ApexOrbView(ctx: Context) : View(ctx) {
+                  private var phase = 0f
                   private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
-                  private val facetPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
-                  private val arcPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                      style = Paint.Style.STROKE
-                      strokeWidth = 4f
-                      strokeCap = Paint.Cap.ROUND
+                  private val bmpPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+                  private val cleanLogo: Bitmap? = run {
+                      val raw = BitmapFactory.decodeResource(resources, R.drawable.apex_center_logo) ?: return@run null
+                      val w = raw.width; val h = raw.height
+                      val pixels = IntArray(w * h)
+                      raw.getPixels(pixels, 0, w, 0, 0, w, h)
+                      for (i in pixels.indices) {
+                          val c = pixels[i]
+                          val r = Color.red(c); val g = Color.green(c); val b = Color.blue(c)
+                          val lum = maxOf(r, maxOf(g, b))
+                          val diff = b - r
+                          val alpha = when {
+                              lum < 38 && diff < 25 -> 0
+                              lum < 85 && diff < 55 -> ((lum - 38) * 255 / 47).coerceIn(0, 255)
+                              else -> 255
+                          }
+                          pixels[i] = Color.argb(alpha, r, g, b)
+                      }
+                      Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).apply { setPixels(pixels, 0, w, 0, 0, w, h) }
                   }
+
                   init {
-                      ValueAnimator.ofFloat(0f, 360f).apply {
-                          duration = 8000
+                      ValueAnimator.ofFloat(0f, (Math.PI * 2).toFloat()).apply {
+                          duration = 3600
                           repeatCount = ValueAnimator.INFINITE
                           interpolator = LinearInterpolator()
-                          addUpdateListener { angle = it.animatedValue as Float; invalidate() }
+                          addUpdateListener { phase = it.animatedValue as Float; invalidate() }
                           start()
                       }
                   }
+
                   override fun onDraw(canvas: Canvas) {
                       val cx = width / 2f
                       val cy = height / 2f
-                      val r = width * 0.36f
-                      glowPaint.shader = RadialGradient(cx, cy, r * 1.35f, intArrayOf(Color.parseColor("#1D4ED8"), Color.parseColor("#080E1E"), Color.TRANSPARENT), null, Shader.TileMode.CLAMP)
-                      canvas.drawCircle(cx, cy, r * 1.35f, glowPaint)
+                      val wave = sin(phase.toDouble()).toFloat()
+                      val floatY = wave * (height * 0.035f)
+                      val pulseScale = 1f + wave * 0.03f
+                      val r = width * 0.42f
 
-                      val rect1 = RectF(cx - r * 1.18f, cy - r * 1.18f, cx + r * 1.18f, cy + r * 1.18f)
-                      arcPaint.color = Color.parseColor("#38BDF8")
-                      canvas.drawArc(rect1, angle, 95f, false, arcPaint)
-                      canvas.drawArc(rect1, angle + 180f, 95f, false, arcPaint)
+                      glowPaint.shader = RadialGradient(
+                          cx, cy + floatY, r * 1.25f,
+                          intArrayOf(Color.argb((110 + (wave * 35)).toInt(), 56, 189, 248), Color.argb(35, 29, 78, 216), Color.TRANSPARENT),
+                          null, Shader.TileMode.CLAMP
+                      )
+                      canvas.drawCircle(cx, cy + floatY, r * 1.25f, glowPaint)
 
-                      val leftPath = Path().apply {
-                          moveTo(cx, cy - r * 0.72f)
-                          lineTo(cx - r * 0.68f, cy + r * 0.58f)
-                          lineTo(cx - r * 0.32f, cy + r * 0.58f)
-                          lineTo(cx, cy - r * 0.06f)
-                          close()
+                      cleanLogo?.let { bmp ->
+                          canvas.save()
+                          canvas.translate(cx, cy + floatY)
+                          canvas.scale(pulseScale, pulseScale)
+                          val half = width * 0.44f
+                          canvas.drawBitmap(bmp, null, RectF(-half, -half, half, half), bmpPaint)
+                          canvas.restore()
                       }
-                      facetPaint.shader = LinearGradient(cx, cy - r * 0.72f, cx - r * 0.68f, cy + r * 0.58f, Color.parseColor("#7DD3FC"), Color.parseColor("#1D4ED8"), Shader.TileMode.CLAMP)
-                      canvas.drawPath(leftPath, facetPaint)
-
-                      val rightPath = Path().apply {
-                          moveTo(cx, cy - r * 0.72f)
-                          lineTo(cx + r * 0.68f, cy + r * 0.58f)
-                          lineTo(cx + r * 0.32f, cy + r * 0.58f)
-                          lineTo(cx, cy - r * 0.06f)
-                          close()
-                      }
-                      facetPaint.shader = LinearGradient(cx, cy - r * 0.72f, cx + r * 0.68f, cy + r * 0.58f, Color.parseColor("#38BDF8"), Color.parseColor("#1E40AF"), Shader.TileMode.CLAMP)
-                      canvas.drawPath(rightPath, facetPaint)
-
-                      val innerPath = Path().apply {
-                          moveTo(cx, cy + r * 0.06f)
-                          lineTo(cx + r * 0.28f, cy + r * 0.36f)
-                          lineTo(cx - r * 0.14f, cy + r * 0.26f)
-                          close()
-                      }
-                      facetPaint.shader = null
-                      facetPaint.color = Color.parseColor("#0284C7")
-                                            canvas.drawPath(innerPath, facetPaint)
-
-                      glowPaint.shader = RadialGradient(cx, cy + r * 0.68f, r * 0.7f, intArrayOf(Color.parseColor("#E0F2FE"), Color.parseColor("#38BDF8"), Color.TRANSPARENT), null, Shader.TileMode.CLAMP)
-                      canvas.save()
-                      canvas.scale(1f, 0.14f, cx, cy + r * 0.68f)
-                      canvas.drawCircle(cx, cy + r * 0.68f, r * 0.7f, glowPaint)
-                      canvas.restore()
                   }
               }
+              
+              
 
               class RainbowCapsuleLayout(ctx: Context) : FrameLayout(ctx) {
                   private var phase = 0f
