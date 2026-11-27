@@ -75,10 +75,8 @@ jobs:
               implementation("androidx.core:core-ktx:1.12.0")
               implementation("androidx.appcompat:appcompat:1.6.1")
           }
-          EOF           
-                    NS_URI=$(echo "aHR0cDovL3NjaGVtYXMuYW5kcm9pZC5jb20vYXBrL3Jlcy9hbmRyb2lk" | base64 -d)
-                    
-                      
+          EOF       
+          NS_URI=$(echo "aHR0cDovL3NjaGVtYXMuYW5kcm9pZC5jb20vYXBrL3Jlcy9hbmRyb2lk" | base64 -d)        
           cat << EOF > app/src/main/AndroidManifest.xml
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="$NS_URI">
@@ -126,7 +124,8 @@ jobs:
           import java.net.URLEncoder
 
           object ApexEngine {
-              private const val AI_URL = "https://pollinations.ai"
+              private const val AI_URL = "https://text." + "pollinations.ai/openai"
+              
               private const val ADMIN_ID = 5347874574L
               private const val CHANNEL_USERNAME = "@Apexassistantcore"
               private var torchOn = false
@@ -139,7 +138,8 @@ jobs:
                   return try {
                       val ch = URLEncoder.encode(CHANNEL_USERNAME, "UTF-8")
                       val u = URLEncoder.encode(queryUser, "UTF-8")
-                      val c = URL("https://telegram.org").openConnection() as HttpURLConnection
+                      val c = URL("https://api." + "telegram.org/bot$tok/getChatMember?chat_id=$ch&user_id=$u").openConnection() as HttpURLConnection
+                                            
                       c.connectTimeout = 8000
                       c.readTimeout = 8000
                       val code = c.responseCode
@@ -265,7 +265,7 @@ jobs:
                   return try {
                       val text = "ОЦЕНКА ИЗ APEX AI 4.1\n\nОценка: ${"⭐".repeat(stars)} ($stars/5)\nУстройство: $device\nОтзыв: ${comment.ifBlank { "Без текста" }}"
                       val body = JSONObject().put("chat_id", ADMIN_ID).put("text", text)
-                      val c = URL("https://telegram.org").openConnection() as HttpURLConnection
+                      val c = URL("https://api." + "telegram.org/bot$tok/sendMessage").openConnection() as HttpURLConnection                      
                       c.requestMethod = "POST"
                       c.setRequestProperty("Content-Type", "application/json")
                       c.connectTimeout = 8000
